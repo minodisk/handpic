@@ -187,7 +187,8 @@ with their reason: the judgment colors (`STARS_COLOR`, `PICK_COLOR`,
 `LABEL_BAND_SCALE`, a palette value no theme changes) with
 `LABELED_NAME_COLOR`, what is drawn
 over the photo (`mark.rs`, `overlay.rs`, `peaking.rs`, `perfgraph.rs`, the
-burst badge's `BADGE_COLOR` and the halos).
+burst badge's `BADGE_COLOR`, the strip marks' dark copies and the face
+labels' halos).
 
 None of its optional features (`tree-sitter*`, `syntect`, `speech`,
 `inspector`, `decimal`, `gpui-fast`) is on. `gpui-kit` itself turns on
@@ -2080,8 +2081,8 @@ time a burst of its own. The view keeps the open folder's grouping in
   a 6 px radius at the band's first and last cell, the gap and the cell
   being the current `strip::Geometry`'s. `STRIP_PADDING` is 7 px at every
   strip height, the Tauri strip's, room for the band. The `position/size` badge is shaped
-  text at the image box's bottom-right, 2 px in, in the fixed `BADGE_COLOR` (`#fafafa`, the same in every theme as it sits over the photo on the halo) over the
-  eight dark copies of `overlay::HALO`, painted before the rejected dim so a
+  text at the image box's bottom-right, 2 px in, in the fixed `BADGE_COLOR` (`#fafafa`, the same in every theme as it sits over the photo) over
+  one black copy 1 px down and right, as the stars are, painted before the rejected dim so a
   rejected member's badge dims with its cell, and a rejected member's band
   is drawn at the dimmed alpha (`Roles::band_dimmed`, 0.08 x 0.45) as
   `.cell.rejected`'s opacity covers the `::before`.
@@ -3666,14 +3667,17 @@ cx)` renders the path through the application's `AssetSource` (`Icons`, so
 `icons::SCAN_FACE` resolves as it does for `svg().path(..)`) into a
 monochrome sprite drawn in `color`; its `Err` is logged, not unwrapped. The
 strip's face focus icon is 12 x 12 px, 2 px inside the image box's
-bottom-left, over eight black copies at `overlay::HALO`'s offsets for the
-Tauri `drop-shadow`, and painted before the rejected cell's `Roles::rejected_dim`
-quad so the dimming covers it. Its state is computed in `strip_cells()` from
+bottom-left, over one black copy 1 px down and right (`MARK_SHADOW`), as
+the stars are, and painted before the rejected cell's
+`Roles::rejected_dim` quad so the dimming covers it. Its state is computed in `strip_cells()` from
 `facts` as the filter's `passes` does, so it follows pass 2 with no
 bookkeeping. The closed-eyes mark (`icons::EYE_OFF`) is painted the same
 way in a second slot 14 px to the right, so neither icon moves when the
 other appears. That the icon is crisp at 100 % and 150 % is not yet checked by
-eye.
+eye. The eight 1 px black copies at `overlay::HALO`'s offsets it had
+before were drawn, but merged into a dark box filling the 12 px icon over a
+bright photo, with no edge like the stars' single copy gives (seen on
+Windows 11 on 2026-11-27 through the MCP `screenshot`).
 
 ### A Windows mouse wheel arrives in lines (Inferred)
 

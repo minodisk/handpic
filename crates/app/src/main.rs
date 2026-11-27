@@ -7246,10 +7246,12 @@ const STARS_COLOR: u32 = 0xffd050;
 const PICK_COLOR: u32 = 0x6bdc8a;
 const REJECT_COLOR: u32 = 0xff6b6b;
 const LABELED_NAME_COLOR: u32 = 0xfafafa;
-/// A burst badge's text, over the photo on its dark halo, so fixed in every
+/// A burst badge's text, over the photo on its dark copy, so fixed in every
 /// theme.
 const BADGE_COLOR: u32 = 0xfafafa;
 const MARK_SIZE: f32 = 11.;
+/// Where a strip mark's one black copy sits under it, as the stars' outline.
+const MARK_SHADOW: (f32, f32) = (1., 1.);
 /// `.cell.burst::before`'s end radius.
 const BAND_RADIUS: f32 = 6.;
 const FLAG_DOT: f32 = 7.;
@@ -7477,8 +7479,8 @@ fn paint_burst_band(
 
 /// `.cell span.marks`: an icon 2 px inside the image box's bottom-left, in
 /// `slot` 0 the face focus icon's and in slot 1 the closed-eyes mark's right
-/// of it, so neither moves when the other is drawn, over dark copies for the
-/// `drop-shadow` halo.
+/// of it, so neither moves when the other is drawn, over a 1 px dark copy as
+/// the stars are.
 fn paint_face_icon(
     icon: &'static str,
     color: u32,
@@ -7505,14 +7507,13 @@ fn paint_face_icon(
             log::warn!("failed to paint {icon}: {e}");
         }
     };
-    for (dx, dy) in overlay::HALO {
-        paint(at + point(px(dx), px(dy)), 0x000000, window);
-    }
+    let (dx, dy) = MARK_SHADOW;
+    paint(at + point(px(dx), px(dy)), 0x000000, window);
     paint(at, color, window);
 }
 
 /// `.cell span.count`: the `position/size` badge at the image box's
-/// bottom-right, over dark copies for the halo.
+/// bottom-right, over a 1 px dark copy as the stars are.
 fn paint_burst_badge(
     mark: &BurstMark,
     image_box: Bounds<Pixels>,
@@ -7534,17 +7535,15 @@ fn paint_burst_badge(
         image_box.origin.x + inset,
         image_box.bottom() - inset - line_height,
     );
-    let halo = shape(0x000000, window);
-    for (dx, dy) in overlay::HALO {
-        let _ = halo.paint(
-            at + point(px(dx), px(dy)),
-            line_height,
-            TextAlign::Right,
-            width,
-            window,
-            cx,
-        );
-    }
+    let (dx, dy) = MARK_SHADOW;
+    let _ = shape(0x000000, window).paint(
+        at + point(px(dx), px(dy)),
+        line_height,
+        TextAlign::Right,
+        width,
+        window,
+        cx,
+    );
     let _ = shape(BADGE_COLOR, window).paint(at, line_height, TextAlign::Right, width, window, cx);
 }
 
@@ -7564,8 +7563,9 @@ fn paint_marks(marks: &Marks, image_box: Bounds<Pixels>, window: &mut Window, cx
         let width = Some(image_box.size.width - inset * 2.);
         let at = image_box.origin + point(inset, inset);
         let line_height = px(MARK_SIZE + 3.);
+        let (dx, dy) = MARK_SHADOW;
         let _ = shape(0x000000, window).paint(
-            at + point(px(1.), px(1.)),
+            at + point(px(dx), px(dy)),
             line_height,
             TextAlign::Right,
             width,
