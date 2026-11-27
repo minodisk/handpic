@@ -751,13 +751,14 @@ Files: `crates/app/src/main.rs` (`strip_tips`, `paint_face_icon`), `crates/app/s
 
 #### Background
 
-On Windows 11 on 2026-11-23 the strip's stars showed a dark outer outline and the face focus icons did not, and the user wanted the strip's marks drawn one way, like the stars. The `strip-marks-outline` change paints the face focus icon, the closed-eyes mark and the burst badge as the stars are painted: the mark over one black copy of itself 1 px down and right (`MARK_SHADOW`), in place of the eight copies at `overlay::HALO`'s offsets, which the `f` overlay's face labels keep. A capture through the MCP `screenshot` tool showed the new drawing; colors and legibility are left to the user's eye. Plan: `docs/plans/20261127-strip-marks-outline/plan.md`.
+On Windows 11 on 2026-11-23 the strip's stars showed a dark outer outline and the face focus icons did not, and the user wanted the strip's marks drawn one way, like the stars. The `strip-marks-outline` change paints the face focus icon, the closed-eyes mark and the burst badge as the stars are painted: the mark over one black copy of itself 1 px down and right (`MARK_SHADOW`), in place of the eight copies at `overlay::HALO`'s offsets, which the `f` overlay's face labels keep. CI, the unit tests and a capture through the MCP `screenshot` tool showed the new drawing on Windows; the capture showed no burst badge, and colors and legibility are left to the user's eye. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261127-strip-marks-outline/plan.md`.
 
 Files: `crates/app/src/main.rs` (`paint_marks`, `paint_face_icon`, `paint_burst_badge`, `MARK_SHADOW`).
 
 #### TODO
 
-- [ ] On screen, check that the strip's stars, face focus icon, closed-eyes mark and burst badge each have the same dark outline, and that each reads over both bright and dark parts of a photo.
+- [ ] On Windows, on a scanned folder that includes a burst (frames within `BURST_GAP_MS`, so the badge shows) and a closed-eyes mark over a bright area, check on screen that the strip's stars, face focus icon, closed-eyes mark and burst badge each have the same dark outline (one dark copy down and right), and that each reads over both bright and dark parts of a photo.
+- [ ] On macOS and Linux (any platform at hand), repeat the same check.
 
 ### App: real-device checks of the gpui-component adoption (theme, Input, controls, menus, Root, the three Dialogs)
 

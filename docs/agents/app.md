@@ -188,7 +188,13 @@ with their reason: the judgment colors (`STARS_COLOR`, `PICK_COLOR`,
 `LABELED_NAME_COLOR`, what is drawn
 over the photo (`mark.rs`, `overlay.rs`, `peaking.rs`, `perfgraph.rs`, the
 burst badge's `BADGE_COLOR`, the strip marks' dark copies and the face
-labels' halos).
+labels' halos). The strip's marks (stars, face focus icon, closed-eyes mark,
+burst badge) take one black copy at `(+1, +1)` (`MARK_SHADOW`, next to
+`MARK_SIZE`), not `overlay::HALO`'s eight offsets: over a bright photo area
+the eight copies merge into a dark box behind a small glyph and fill its
+inside, and over a dark area they do not show. The halo stays only for the
+`f` overlay's face labels (`paint_label`). Do not move the stars to the halo
+(`../plans/_archived/20261127-strip-marks-outline/learnings.md`).
 
 None of its optional features (`tree-sitter*`, `syntect`, `speech`,
 `inspector`, `decimal`, `gpui-fast`) is on. `gpui-kit` itself turns on
@@ -1848,6 +1854,12 @@ full-size eye measure says).
   and have it expand placeholders (`%S%` for the JSON-escaped test folder)
   itself. Python run with `-I` ignores `PYTHONIOENCODING`; add `-X utf8` to
   print Japanese preset names on a cp932 console.
+  Never run `python -I -` (or `python -`) without real stdin, for example
+  after an empty heredoc: it starts the REPL with no console, loops on
+  `WinError 123` under Git Bash and spins a core until killed. Always write
+  the script to a file. Without Pillow on the host, zoom crops of a capture
+  need a small pure-Python PNG reader / writer (`zlib`, filters undone by
+  hand).
 - Rule: stop a test instance of `handpic.exe` by the PID whose command
   line names the scratch folder. `taskkill /IM handpic.exe` is refused by
   the permission classifier because it could kill the user's own instance.
