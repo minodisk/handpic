@@ -623,11 +623,12 @@ the executable and the `.icns` present).
   debug --features screenshot` itself, so CI exercises the task this section describes. The
   Windows-only NASM `PATH` problem (see "winget's NASM is per-user and not on
   `PATH`") that keeps other steps on `mise exec` does not apply on macOS.
-- Pending manual checks, not done here: the taskbar, title bar and Explorer
-  icon on Windows, and the running window's icon after the install task on a
-  Wayland and an X11 session. The Dock / Finder icon of the built `.app` was
-  seen on macOS on 2026-11-26
-  (`docs/plans/_archived/20261126-macos-device-checks-mcp/results.md`).
+- Pending manual check, not done here: the running window's icon after the
+  install task on a Wayland and an X11 session. The Dock / Finder icon of the
+  built `.app` was seen on macOS on 2026-11-26
+  (`docs/plans/_archived/20261126-macos-device-checks-mcp/results.md`), and
+  the taskbar, title bar and Explorer icon on Windows on 2026-11-27
+  (`docs/plans/_archived/20261127-windows-device-checks-c5/results.md`).
 
 ### The `Package` workflow builds the distributables (Inferred)
 
@@ -3584,10 +3585,12 @@ both ask for a tooltip.
   overlay, which this app does not use. GPUI places the tooltip at the
   pointer and flips it above or left of the pointer when it would leave the
   window (`Window::prepaint_tooltip`), which keeps the strip's inside.
-- Not verified by hand yet: the hover itself, the swap from one cell to the
-  next, a scroll under a still pointer and the wrapping of a long error; the
-  check is pending in
-  `../plans/20261114-native-strip-face-icon-tooltips/learnings.md`.
+- Measured (2026-11-27, Windows 11,
+  `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`): the
+  hover, the swap from one cell to the next, a scroll under a still pointer
+  removing the tooltip, a cell cut by the window's left edge showing its own
+  and the clicks over the regions. Still unmeasured: the wrapping of a long
+  error at 360 px and the delay.
 
 ### The strip, the tree and the meta pane draw the theme's scrollbar (Inferred)
 
@@ -3860,6 +3863,23 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
   applied (a row's wording was reworded by a merge after the run's build).
   After the rebase, check that each anchor a finding was to extend still
   exists.
+- Rule: a `cargo build` of `crates/app` can be stopped by the host's
+  low-memory reaper while several other sessions build; build with
+  `cargo build -j 2`
+  (`docs/plans/_archived/20261127-windows-device-checks-c5/results.md`).
+- Rule: the window has no frame above the client area, so the top resize
+  band is the client's top pixel, over the title bar; drag from y = 0 of the
+  client. A corner drag can do nothing on the first try; retry before
+  calling it a failure
+  (`docs/plans/_archived/20261127-windows-device-checks-c5/results.md`).
+- Rule: a Python `subprocess` capture of a launcher that starts the app with
+  redirected std handles hangs until the app exits, since the app inherits
+  the handles; have the launcher write to files and read them instead
+  (`docs/plans/_archived/20261127-windows-device-checks-c5/learnings.md`).
+- Rule: a `screenshot` call takes about 0.3 s, so a delay or a transient
+  shorter than that (a tooltip's 500 ms delay, the pane between a folder
+  open and its first preview) cannot be measured with it
+  (`docs/plans/_archived/20261127-windows-device-checks-c5/results.md`).
 
 ### Every keystroke goes through the keymap (Inferred)
 
@@ -4344,12 +4364,14 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   from the root's pure white.
 - Rule: the Sort / Filter and right-click menus' height cap subtracts
   `TITLE_BAR_HEIGHT` as well as 40 px, so a long menu stops under the bar.
-- Unmeasured (by-hand checks pending in the plan): the Windows resize edges
-  over the bar, Snap Layouts, double-click to maximize, the controls and
-  drag while a dialog's backdrop covers the bar, a `windowBounds` saved
-  under the OS bar restoring without drift, macOS's traffic lights against
-  the 80 px left padding, and Linux under client- and server-side
-  decorations.
+- Measured (2026-11-27, Windows 11,
+  `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`): the
+  resize edges over the bar (the client's top pixel), Snap Layouts, and a
+  stored `windowBounds` restoring without drift. Observed dead: the controls
+  and the drag under the trash dialog's and a folder operation's backdrop
+  (they work under the settings); the fix is in flight. Unmeasured:
+  double-click to maximize, macOS's traffic lights against the 80 px left
+  padding, and Linux under client- and server-side decorations.
 
 ### Text is typed through gpui-component's `Input` (Inferred)
 
@@ -4731,8 +4753,13 @@ strip needed one because `uniform_list` is vertical only.
   at depths 2 to 4, the count stays whole next to a short and a truncated
   name, the cursor ring, hover and open-row highlights span the pane less
   the inset with rounded corners, and the vertical scrollbar sits at the
-  pane's right edge. Not yet observed: a drag of the scrollbar's thumb, a
-  click on a row's inset edge and a long pending name.
+  pane's right edge. Measured (2026-11-27, Windows 11,
+  `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`): a
+  drag of the scrollbar's thumb scrolls the tree; a held rename's long
+  pending name truncates with its count whole; the left 0 to 5 px of the
+  pane is the list's `px_1` padding and takes no press, the row starting at
+  x = 6; the row's hover fill runs under the 16 px scrollbar track on the
+  right, but a press there goes to the track, not the row.
 - Rule: a row shows its file count, expanded or collapsed, whenever it is
   above zero, from one of two sources drawn the same. The listed count
   (`Node::raw_count`) is the last `read_dir` of the folder: an expand, a
@@ -4749,9 +4776,12 @@ strip needed one because `uniform_list` is vertical only.
   for each. Measured (2026-11-22, Windows 11): the listed count, the cached
   counts after a restart, a folder renamed in the app keeping its count, a
   folder renamed outside the app and a new folder of an old name showing
-  none until listed, and a folder never listed showing none. Not yet
-  observed: a folder reached through a mapped drive, a symlink or a
-  junction, and an index upgraded from before the table.
+  none until listed, and a folder never listed showing none. Measured
+  (2026-11-27, Windows 11,
+  `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`): a
+  junction and a folder on a mapped network drive keeping their counts after
+  a restart, and an index whose `folder_counts` table was dropped showing no
+  count on a collapsed row; a symlink was seen on macOS on 2026-11-26.
 - Rule: every count the tree learns from disk is written to `folder_counts`
   under the tree node's path, the string handed to `folders::list`: each
   successful listing through `tree_listed` (an expand, `Refresh`, a tree
@@ -4763,7 +4793,10 @@ strip needed one because `uniform_list` is vertical only.
   the writable index, the counts learned meanwhile coalesced per folder with
   the latest winning; nothing is written without an index. A write still
   queued at quit is lost, not drained: it is a cache, and the folder's next
-  listing writes it again. Inferred, not yet observed in the running app.
+  listing writes it again. Measured (2026-11-27, Windows 11,
+  `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`): a RAW
+  added outside the app and a `Refresh` of the collapsed folder showed the
+  new count, kept after a restart.
 - Rule: every successful tree listing (`tree_listed`'s `Ok` branch: an
   expand, `Refresh`, a tree watcher change, `Expand All`, a reveal's chain)
   also queues one prune of the listed folder (`Index::prune_folder_counts`):
@@ -4782,7 +4815,10 @@ strip needed one because `uniform_list` is vertical only.
   guard, consecutive counts as one `set_folder_counts`; a failure stops that
   batch and is logged, and the next batch still goes out. The tree's
   in-memory cached map is not pruned; it is replaced at its next read.
-  Inferred, not yet observed in the running app.
+  Measured (2026-11-27, Windows 11,
+  `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`): a
+  counted folder deleted outside the app lost its row on a `Refresh` of its
+  parent, and a new folder of that name showed no count after a restart.
 - Rule: the cached counts are read whole (`Index::folder_counts`, the
   `folder_counts` table alone, never `files`) on `background_spawn` under
   `index::lock` of the reader, never touching a folder on disk, and replace
