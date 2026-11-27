@@ -1167,17 +1167,6 @@ Files: `mise.toml`, `tools/package/macos.sh`, `tools/package/windows.sh`, `tools
 - [ ] On a Mac with macOS 15 or later, download the latest release's `Handpic-<version>-macos-arm64.dmg` with a browser, drag `Handpic.app` to `/Applications` and open it. Expect Gatekeeper to block it, and System Settings, Privacy & Security, Open Anyway to let it start, as `README.md` / `docs/humans/usage.md` "Installing" (and their Japanese pairs) say.
 - [ ] On Linux, run the `install.sh` command of the usage guide against a release's `SHA256SUMS`. Expect `~/.local/bin/handpic` to start from the desktop menu.
 
-### App: decide the Linux deb's `Conflicts` / `Replaces: riffle` and whether it depends on `libegl1`
-
-The app deb is `Package: handpic`. The shipped Tauri deb (v1.10.0) is `Package: riffle`, so both can be installed side by side, and the app deb does not upgrade it in place. The removed Tauri app's `tauri.conf.json` on `main` had `linux.deb.replaces` / `conflicts` `["riffle"]`, never released. Separately, `tools/package/linux.sh` adds `libvulkan1` and `libwayland-client0` to `dpkg-shlibdeps`'s result but not `libegl1`, which wgpu's GL fallback opens when no Vulkan adapter is found. A desktop normally has it, but a machine without Vulkan would need it. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md` ("The deb does not upgrade a Riffle deb in place" risk and Step 3's `Depends` measurement).
-
-Files: `crates/app/packaging/linux/control`, `tools/package/linux.sh`.
-
-#### TODO
-
-- [ ] Decide whether `control` gets `Conflicts` / `Replaces: riffle`, after the real-device deb check above. Done when the choice is in the template or `app.md` records why not.
-- [ ] Decide whether `Depends` gets `libegl1`, or `libvulkan1 | libegl1`, after the Vulkan-less machine check. Done when `linux.sh` reflects the choice or the guide records why not.
-
 ### App: real-device checks of the title bar's smaller text and centered folder name (native-title-bar-folder-name)
 
 #### Background
