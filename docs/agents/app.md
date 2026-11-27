@@ -4589,12 +4589,13 @@ decision, 2026-11-23), opened `Windowed` with no `display_id`.
   horizontally and within the frame's 3.5 px vertically, 31 px right of the
   display's center, no longer 93 px
   (`docs/plans/_archived/20261127-windows-device-checks-c7/results.md`).
-- Not seen yet: a second monitor (with a different scale factor), the
-  default window with the taskbar at the bottom, and the taskbar docked at
-  the top (the
-  restore bounds are in workspace coordinates there, the clamp compares them
-  with the display's screen coordinates): the pending check in
-  `../plans/20261114-gpui-session-restore/learnings.md`. macOS and Linux are
+- Not seen yet: the default window with the taskbar at the bottom (the
+  `todo.md` item "App: real-device check of the default window's centering on
+  the visible area"), a second monitor (with a different scale factor), and
+  the taskbar docked at the top (the restore bounds are in workspace
+  coordinates there, the clamp compares them with the display's screen
+  coordinates): the pending check in
+  `../plans/_archived/20261114-gpui-session-restore/learnings.md`. macOS and Linux are
   covered by the CI build and the unit tests only; Wayland cannot place a
   window, so only the size can come back there.
 
