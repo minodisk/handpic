@@ -1198,16 +1198,6 @@ Files: `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`), `crates/app/
 
 - [ ] On macOS and Linux, when at hand, open a folder of RAW files with people and let pass 2 finish. Expect the strip cells showing the amber `eye-off` mark at the bottom-left to be exactly the files whose meta pane `Eyes` row says closed, and exactly the files the filter menu's `Eyes` > `Closed` keeps. On a fresh `--index`, expect the mark to appear on cells live as pass 2 reaches them (`analyzing N / M`), with no re-listing. At the minimum strip height (`stripheight::MIN`), expect the mark to sit right of the face focus icon without overlapping it or the burst badge (including a three-digit badge), and to be dimmed with a rejected cell. (All three passed on Windows on 2026-11-27.)
 
-### App: no CI job builds the app without `test-support` before `Package`
-
-#### Background
-
-`macos-ci-bundle-reuse` (`docs/plans/_archived/20261127-macos-ci-bundle-reuse/plan.md`) switched the macOS `app` job's bundle step to `--features screenshot` so it reuses the test build. With that, no CI job before `Package` builds the app without GPUI's `test-support`. A test-only GPUI API used in non-test code (the rule under "The main view opens on GPUI's test platform" in `docs/agents/app.md`) therefore surfaces only in the `Package` workflow's release build. Clippy and the tests still cover the default feature set's code. A cheap follow-up is a feature-less `cargo check` on one leg, if the cost of a second GPUI check variant is acceptable. Files: `.github/workflows/ci.yml`, `docs/agents/app.md`.
-
-#### TODO
-
-- [ ] Decide whether a feature-less `cargo check` on one `app` job leg is worth its cost (a second GPUI check variant). If so, add it, and update the rule in `docs/agents/app.md` under "The main view opens on GPUI's test platform" to say which job now catches a test-only API in non-test code.
-
 ### Agents: `planner.md` should have a plan name the input kind and material of each hands-on Done-when line
 
 #### Background

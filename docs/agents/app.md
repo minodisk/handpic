@@ -425,7 +425,10 @@ compiled when the app starts instead. `macos-latest` is arm64, where
 It is a matrix over `windows-latest`, `ubuntu-latest` and `macos-latest` with
 `fail-fast` off, each leg running the same `mise exec rust@1.98.1 -- cargo
 clippy` / `cargo test`; only the Windows leg adds `setup-nasm`'s
-`$USERPROFILE/nasm` to `PATH` itself. Nothing under `crates/app/src` is
+`$USERPROFILE/nasm` to `PATH` itself. The Linux leg alone first runs
+`cargo check --locked` with no feature and no test target (the "Check the
+app without test-support" step), see "The main view opens on GPUI's test
+platform". Nothing under `crates/app/src` is
 `cfg(windows)`-only, and `tree.rs`'s path helpers work on strings, so its
 `C:\` and UNC test paths do not depend on the host's `std::path`.
 
@@ -468,8 +471,10 @@ Raising the limit would have kept the duplicate compilation on every cold
 run and the second variant in the macOS cache (2.4 GB) of a repository whose
 caches overrun the 10 GB limit and are evicted. The step checks only the
 bundle's layout, which the feature does not change; the release bundle comes
-from `package.yml`, still with no feature. So `ci.yml` no longer builds a
-default-feature, non-test app on any platform; `Package` still does.
+from `package.yml`, still with no feature. So no `ci.yml` build of the app
+has `test-support` off but the Linux leg's featureless `cargo check` (see
+"The main view opens on GPUI's test platform"); `Package` still builds one
+on every platform.
 
 - Rule: the CI bundle build keeps the dependency feature set of `cargo test`.
   A `Compiling gpui-*` line in the bundle step's log means they differ;
@@ -3522,7 +3527,19 @@ not instrumented: a hang inside one is reported as
   (`cargo build`, the `Package` workflow's release build) fails. The macOS
   CI job's bundle step builds with `screenshot`, which turns `test-support`
   on too (see "The macOS bundle step reuses the test build"), so it no
-  longer catches this.
+  longer catches this. The `app (ubuntu-latest)` leg's "Check the app
+  without test-support" step does: a plain `cargo check --locked` of
+  `crates/app`, run before the clippy and test step, whose builds have
+  `test-support` on. The package's edition 2024 resolver does not unify the
+  dev-dependency's features into a build with no test target, so the check
+  sees GPUI without it. It compiles the Linux configuration only, so a
+  test-only API under a Windows-only or macOS-only `cfg` still first fails
+  in `Package`. Measured on its first run (run 46027233616, PR #1342, the
+  Linux cache restored): the step took 43 s, its log checking the `gpui-*`
+  crates afresh, and the whole Linux leg 2 min 30 s of its 30-minute limit.
+  `actions/cache` saves only on a missed key, so the check's artifacts enter
+  the cache only when `crates/app/Cargo.lock` next changes; until then each
+  run pays about that.
 
 ### The UI tests drive the view with keys over generated DNGs (Measured)
 
