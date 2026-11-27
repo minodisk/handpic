@@ -1027,10 +1027,12 @@ work does not fit in one step, **do not quietly keep cramming it into one PR**:
    CLI fails under the sandbox):
 
    ```bash
-   sleep 5; herdr pane send-text "$HERDR_PANE_ID" "/exit"; herdr pane send-keys "$HERDR_PANE_ID" enter
+   sleep 5; MSYS_NO_PATHCONV=1 herdr pane send-text "$HERDR_PANE_ID" "/exit"; herdr pane send-keys "$HERDR_PANE_ID" enter
    ```
 
-   so `/exit` lands once the turn is idle. The worktree stays for the
+   so `/exit` lands once the turn is idle. Under Git Bash, `send-text` needs
+   `MSYS_NO_PATHCONV=1`, or MSYS rewrites the leading-slash `/exit` as a
+   Windows path and types `C:/Program Files/Git/exit` instead. The worktree stays for the
    `wrangle` skill's reap. Outside herdr, tell the user the session can be
    closed
 3. Do not use the `EndConversation` tool; it is not for finishing tasks
