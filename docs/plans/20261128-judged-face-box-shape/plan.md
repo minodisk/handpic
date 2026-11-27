@@ -164,3 +164,4 @@ rules are out of scope.
 
 ## Progress
 
+- (2026-11-28) Step 1 done: box shape and size measured over the 39 pairs, outcome B (no threshold reaches 20 of the 24 twins without taking a different person), double count accepted, `todo.md` section deleted, no code change
