@@ -3192,6 +3192,7 @@ dependencies = [
  "gpui-pre-platform",
  "handpic-core",
  "handpic-engine",
+ "icu_normalizer",
  "image",
  "log",
  "mozjpeg",

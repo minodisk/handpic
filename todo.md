@@ -565,14 +565,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 - [ ] On Windows, on a folder whose files record a lens, open `Filter ▾` and see the `Lens` section drawn after `Camera` (the sections' order and their appearance at the end of pass 1 were seen through `get_view` on 2026-11-23; the drawn menu was not).
 
-### App: `Camera` / `Lens` order is a case-insensitive compare, not the Tauri `localeCompare`
-
-The app's EXIF filter orders the `Camera` and `Lens` items by a case-insensitive compare with a plain compare as the tie-break, because `crates/app` has no ICU collator. Tauri used `localeCompare`, so the two may differ for punctuation or non-ASCII model names. Found in `gpui-exif-filter` (the plan's trade-off). Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md`. Files: `crates/app/src/exif.rs` (`compare`).
-
-#### TODO
-
-- [ ] Compare the two orders on a folder with punctuated or non-ASCII camera / lens names, against the reference Tauri build named under "App: real-device checks of the f focus mark, face boxes and face mesh" (an installed Riffle 1.10.0, or a build of the commit before #1150) or against `Intl.Collator` / `localeCompare` results for the same names, and, if they differ in a way that matters, order them with a collator (`icu_collator`) or a closer rule.
-
 ### App: real-device check of the Japanese IME in the settings' label name fields
 
 `gpui-settings` gave the GPUI app (`crates/app`) its own settings store (a SQLite file seeded once from the Tauri `settings.json`), persisted the strip's filter and sort order in it, and ported the settings modal: the Culling, Sidecar, Keyboard Shortcuts and Import tabs, opened with Ctrl+, (Meta+, on macOS). CI and the unit tests (`settingsmodal.rs`, `settings.rs`, `textinput.rs`, `filter.rs`, the engine's `store.rs`, `sidecar.rs` `switch_to` and `import.rs` `today_example`) cover the pure models and the store. The store, the settings' shell, the Culling, Sidecar, Keyboard Shortcuts and Import pages, the text fields and the `Lightroom language` `Select` were exercised on Windows 11 on 2026-11-21; only the Japanese IME's composition in a text field was not. Windows only. Plan: `docs/plans/_archived/20261113-gpui-settings/plan.md` (the steps are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/settings.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/settingsview.rs`, `crates/app/src/textinput.rs`, `crates/engine/src/store.rs`, `crates/engine/src/sidecar.rs`, `crates/engine/src/import.rs`.

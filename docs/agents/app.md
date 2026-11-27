@@ -2241,8 +2241,22 @@ dimmed, shows capture order and keeps the stored key.
   (`Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`),
   each a separator, a heading and one item per label, a group the folder
   lacks left out. Numbers sort by value (`f64::total_cmp`), ties by label;
-  `Camera` and `Lens` by a case-insensitive compare, ties by the plain one
-  (Tauri used `localeCompare`; no collator here). The focal length is
+  `Camera` and `Lens` by `exif.rs`'s `text_key`, an approximation of ICU root
+  collation (the Tauri `localeCompare`), not a collator: the NFD string
+  (`icu_normalizer`) weighed per char, a primary from ICU root's order of
+  printable ASCII lowercased (punctuation, then digits, then letters; any
+  other char after them by its lowercase code point), a secondary from ICU's
+  order of the common combining accents, a tertiary putting lowercase first,
+  each level compared as a whole sequence, ties by the plain compare. It was
+  checked against Node's `Intl.Collator` on the 554 camera and 348 lens names
+  exiftool read from 2647 sample RAW files: the earlier case-insensitive
+  compare differed in two places (`NIKON Z5_2` before `NIKON Z50_2`, `_`
+  sorting before the digits; `DG DN | Art 019` before `DG DN II | Art 024`,
+  `|` sorting before the letters), this rule in none, and no real name held a
+  non-ASCII char. Residual: a letter with no canonical decomposition (`Ø`,
+  `ß`, `Æ`, `Ł`) sorts after `z`, not by its base letter, and other scripts
+  in code point order. Take `icu_collator` only once a real name is found
+  that this still orders differently. The focal length is
   bucketed into `exif::FOCAL_RANGES`, half-open. An item is keyed by its
   group and label (`Toggle::Exif`), not its row, since the groups can be
   rebuilt between the frame that drew the menu and the click, which made
