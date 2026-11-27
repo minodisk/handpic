@@ -385,6 +385,17 @@ is gone and whose original path now exists, ignoring errors. All measured on
 2026-11-27 with trash 5.2.9 on Windows 11. Source:
 `docs/plans/_archived/20261128-undo-recycle-index-cleanup/plan.md`.
 
+Seen (2026-11-28, Windows 11, main at `c67a3066`, a debug build with
+`--features screenshot`, `trash` 5.3.0 in `crates/app/Cargo.lock`): two ARWs
+and one `.xmp` in a folder on `C:`, driven through the MCP companion
+(`select_all`, `trash_photos`, `undo`). The `$Recycle.Bin\<SID>\` folder held
+17 `$I` / 0 `$R` files before, 20 / 3 after Move to Trash and 17 / 0 after
+the undo: none of the three new `$I` files was left, all three files came
+back, and the 17 older orphans stayed, as designed. It exercised the chunked
+restore only, not `restore_item` / `restore_to`, a failed chunk or another
+volume. Source:
+`docs/plans/_archived/20261128-undo-recycle-index-check/plan.md`.
+
 - Source: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md`,
   Steps 1-2.
 

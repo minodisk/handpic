@@ -56,16 +56,6 @@ Seen on 2026-11-28 (Windows 11) while checking the right-click menus' keys (`doc
 
 - [ ] Pass each path through `context::shown_path` before the strip's `Copy Path` joins them, with a test, so the clipboard holds `D:\...` as the tree's does.
 
-### Engine: real-device check that an undo of Move to Trash leaves no `$I` file on Windows (undo-recycle-index-cleanup)
-
-#### Background
-
-`undo-recycle-index-cleanup` makes the engine delete the Recycle Bin's `$I` partner of every item that `restore_all` really restored, in `restore_listed`'s chunk closure and in `restore_item` (`crates/engine/src/trash.rs`, `remove_index_file`). The unit tests cover only the `$R` to `$I` name mapping (`index_file_of`); no test touches the real Recycle Bin. `mise run ci:local` was stopped by host memory pressure and not re-run, so the PR's GitHub checks verified the build. The delete itself was never exercised against a real Recycle Bin through the app. Plan: `docs/plans/_archived/20261128-undo-recycle-index-cleanup/plan.md`. Files: `crates/engine/src/trash.rs`.
-
-#### TODO
-
-- [ ] On Windows, count the `$I` files in the volume's `$Recycle.Bin\<SID>\` folder. Run the app with `mise run app:dev:screenshot` (private `--index`, `--settings` and `--log` under a scratchpad folder, `--mcp-port 47842`) on fixtures copied to a temporary folder. Move files to the Trash, undo, and count again. Expect the count unchanged and the files back. Not run in the implementing session: the host was under memory pressure that had already killed a local `ci:local`, so the app build was deferred.
-
 ### App: confirm the split-deferred-open test fails without its fix
 
 #### Background
