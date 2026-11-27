@@ -52,3 +52,4 @@ After this work, a deferred open naming the removed split folder (or a folder un
 - The test constructs the `DateRan::Split` by hand after changing the disk, as the date rename's test calls `folder_renamed` directly. It does not exercise `split_folder` itself (covered by the engine's tests); running the real split would need RAW fixtures with capture dates and the dialog flow.
 
 ## Progress
+- (2026-11-27) Step 1 complete. The local test run, `mise run ci:local` and the check that the new test fails without the fix were not done because the host was out of memory; they are left to the PR's GitHub checks (see `learnings.md`).
