@@ -114,6 +114,17 @@ jobs:
           key: cargo-app-${{ runner.os }}-${{ hashFiles('crates/app/Cargo.lock') }}
           restore-keys: cargo-app-${{ runner.os }}-
 
+      # Clippy, the tests and the macOS bundle step all build with GPUI's
+      # `test-support` on, so this is the one build before `Package` without
+      # it: a test-only GPUI API in non-test code fails here. It runs before
+      # the step below, whose commands without `--locked` would rewrite a
+      # stale Cargo.lock.
+      - name: Check the app without test-support
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: crates/app
+        run: mise exec rust@1.98.1 -- cargo check --locked
+
       # `mise run app:check` runs its task through `bash -c`, and on Windows
       # the build script behind that shell did not find nasm ("program not
       # found") even with the directory on PATH. Run the same two commands

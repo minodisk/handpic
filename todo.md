@@ -1312,16 +1312,6 @@ Files: `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`), `crates/app/
 - [ ] On Windows, at the minimum strip height (`stripheight::MIN`), expect the mark to sit right of the face focus icon without overlapping it or the burst badge (including a three-digit `999/999` badge), and to be dimmed with a rejected cell.
 - [ ] On macOS and Linux, when at hand, repeat the checks above.
 
-### App: no CI job builds the app without `test-support` before `Package`
-
-#### Background
-
-`macos-ci-bundle-reuse` (`docs/plans/_archived/20261127-macos-ci-bundle-reuse/plan.md`) switched the macOS `app` job's bundle step to `--features screenshot` so it reuses the test build. With that, no CI job before `Package` builds the app without GPUI's `test-support`. A test-only GPUI API used in non-test code (the rule under "The main view opens on GPUI's test platform" in `docs/agents/app.md`) therefore surfaces only in the `Package` workflow's release build. Clippy and the tests still cover the default feature set's code. A cheap follow-up is a feature-less `cargo check` on one leg, if the cost of a second GPUI check variant is acceptable. Files: `.github/workflows/ci.yml`, `docs/agents/app.md`.
-
-#### TODO
-
-- [ ] Decide whether a feature-less `cargo check` on one `app` job leg is worth its cost (a second GPUI check variant). If so, add it, and update the rule in `docs/agents/app.md` under "The main view opens on GPUI's test platform" to say which job now catches a test-only API in non-test code.
-
 ### Agents: `planner.md` should have a plan name the input kind and material of each hands-on Done-when line
 
 #### Background
