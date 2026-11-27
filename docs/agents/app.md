@@ -1870,7 +1870,9 @@ full-size eye measure says).
 
 `main.rs` holds one `watch::Watch` whose callback sends `Event::Changed` into
 the scan's channel; each listing calls `watch::set` before `read_listing`, so a
-change during the listing is not missed. `resync.rs` defers a change that
+change during the listing is not missed. The watcher reports a burst
+`DEBOUNCE` (500 ms) after its last event, or `MAX_WAIT` (2 s) after its first
+event while it goes on; the next event starts a new burst. `resync.rs` defers a change that
 arrives while a listing or its scan runs to that scan's end, one pending at
 most, as the Tauri frontend's `resyncPending`: a re-listing mid-scan would
 cancel and restart it. A re-listing carries the current file by path, the
@@ -1878,9 +1880,13 @@ strip's offset (`carried_offset`) and the loaded thumbnails
 (`carried_indices`), bumps a listing counter that drops the previous listing's
 preview reads, and always reads the current preview again.
 
+- Rule: during an import into the open folder the import renames a file in
+  more often than `DEBOUNCE`, so the strip fills at the slower of `MAX_WAIT`
+  and the listing plus scan of the files landed since the last re-listing; a
+  report during the scan waits for its end, so pass 1 is never restarted.
 - Rule: a file still being copied in changes size between events, so each
-  debounced event re-extracts it (`todo=1 removed=1`) until the copy ends;
-  that is expected, not a loop.
+  report of the burst re-extracts it (`todo=1 removed=1`), at least every
+  `MAX_WAIT`, until the copy ends; that is expected, not a loop.
 
 ### The listing and the shown list are two lists, rebuilt by one `refilter` (Measured)
 

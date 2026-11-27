@@ -4,7 +4,8 @@
 //! The events are only a trigger: what changed is always re-derived by the
 //! frontend's rescan (a fresh listing plus `scan_folder`), never read out of
 //! the event. A burst is collapsed into one `on_changed` call, made
-//! `DEBOUNCE` after the last event of the burst.
+//! `DEBOUNCE` after the last event of the burst, or `MAX_WAIT` after its
+//! first event if it goes on that long; the next event starts a new burst.
 //!
 //! The app's own sidecar writes cannot loop back in: `triggers` drops an event
 //! whose paths are all sidecars or write temporaries. Even unfiltered they
@@ -25,6 +26,11 @@ use crate::sidecar::SidecarFormat;
 /// enough that copying a batch of files in one go rescans once, short enough
 /// that a single new file shows up in about a second.
 const DEBOUNCE: Duration = Duration::from_millis(500);
+
+/// How long after the first event of a burst that goes on (an import
+/// renaming files in faster than `DEBOUNCE`) the rescan is triggered anyway,
+/// so the folder fills while the copy runs.
+const MAX_WAIT: Duration = Duration::from_secs(2);
 
 /// The folder currently watched and the watcher holding it. Managed state, one
 /// per app.
@@ -159,34 +165,67 @@ pub fn triggers(paths: &[PathBuf]) -> bool {
         })
 }
 
-/// Collapse bursts on `rx` into one `emit` per folder, `DEBOUNCE` after that
-/// folder's last event. Same shape as `sidecar::run`: wait on the nearest
+/// Collapse bursts on `rx` into one `emit` per folder, at the earlier of
+/// `DEBOUNCE` after that folder's last event and `MAX_WAIT` after its first
+/// (`burst`). Same shape as `sidecar::run`: wait on the nearest
 /// deadline, and treat a timeout as "that one is due".
 fn run<F>(rx: Receiver<String>, emit: F)
 where
     F: Fn(&str),
 {
-    let mut pending: Option<(String, Instant)> = None;
+    let mut pending: Option<Burst> = None;
     loop {
         let message = match &pending {
-            Some((_, deadline)) => {
+            Some(Burst { deadline, .. }) => {
                 rx.recv_timeout(deadline.saturating_duration_since(Instant::now()))
             }
             None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
         };
         match message {
             Ok(dir) => {
-                // A folder change resets the window on the new folder; the old
-                // one is no longer open, so its pending event is dropped.
-                pending = Some((dir, Instant::now() + DEBOUNCE));
+                // A queued event can arrive past the deadline; the due report
+                // goes first so a steady stream cannot hold it back.
+                let now = Instant::now();
+                if let Some(due) = pending.take_if(|burst| burst.deadline <= now) {
+                    emit(&due.dir);
+                }
+                pending = Some(burst(pending.take(), dir, now));
             }
             Err(RecvTimeoutError::Timeout) => {
-                if let Some((dir, _)) = pending.take() {
+                if let Some(Burst { dir, .. }) = pending.take() {
                     emit(&dir);
                 }
             }
             Err(RecvTimeoutError::Disconnected) => return,
         }
+    }
+}
+
+/// A folder's pending report: when its burst began and when it is due.
+struct Burst {
+    dir: String,
+    first: Instant,
+    deadline: Instant,
+}
+
+/// The pending report after an event on `dir` at `now`. The same folder's
+/// burst keeps its first event and is due at the earlier of `DEBOUNCE` from
+/// now and `MAX_WAIT` from that first event. Another folder starts a new
+/// burst: the old one is no longer open, so its pending report is dropped.
+fn burst(pending: Option<Burst>, dir: String, now: Instant) -> Burst {
+    match pending {
+        Some(Burst {
+            dir: open, first, ..
+        }) if open == dir => Burst {
+            dir,
+            first,
+            deadline: (now + DEBOUNCE).min(first + MAX_WAIT),
+        },
+        _ => Burst {
+            dir,
+            first: now,
+            deadline: now + DEBOUNCE,
+        },
     }
 }
 
@@ -324,5 +363,41 @@ mod tests {
 
         drop(tx);
         thread.join().unwrap();
+    }
+
+    /// Events every 100 ms for 7 s are reported every `MAX_WAIT` (a new burst
+    /// starting at the first event after a report), and the stop is still
+    /// reported `DEBOUNCE` after the last event.
+    #[test]
+    fn an_ongoing_burst_is_reported_every_max_wait() {
+        let start = Instant::now();
+        let step = Duration::from_millis(100);
+        let mut pending: Option<Burst> = None;
+        let mut reports = Vec::new();
+        let mut report_due = |pending: &mut Option<Burst>, now: Instant| {
+            if pending.as_ref().is_some_and(|b| b.deadline <= now) {
+                reports.push(pending.take().unwrap().deadline - start);
+            }
+        };
+        let mut now = start;
+        for _ in 0..70 {
+            report_due(&mut pending, now);
+            pending = Some(burst(pending.take(), "/photos".to_string(), now));
+            now += step;
+        }
+        let last = now - step;
+        while pending.is_some() {
+            report_due(&mut pending, now);
+            now += step;
+        }
+        assert_eq!(
+            reports,
+            vec![
+                MAX_WAIT,
+                MAX_WAIT * 2,
+                MAX_WAIT * 3,
+                last + DEBOUNCE - start,
+            ]
+        );
     }
 }
