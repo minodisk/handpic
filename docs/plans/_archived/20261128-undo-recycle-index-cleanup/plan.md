@@ -154,3 +154,4 @@ back.
 - 2026-11-28: Step 1 done. `mise run ci:local` was stopped by host memory
   pressure and not re-run; the PR's GitHub checks verify it. The manual `$I`
   file count check on Windows is still pending, as `learnings.md` records.
+- (2026-11-28) Step 1 complete
