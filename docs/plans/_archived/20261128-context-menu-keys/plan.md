@@ -32,7 +32,7 @@ and an item click runs and returns the keyboard to the view.
 Decision (state it in the PR body): the behaviour follows
 `docs/agents/app.md` (the key context table's `PopupMenu` row and "The
 right-click menu is gpui-component's `PopupMenu` at the pointer") and
-[the native-context-menu plan](../_archived/20261116-native-context-menu/plan.md).
+[the native-context-menu plan](../20261116-native-context-menu/plan.md).
 Up / Down move the highlight, Enter runs the highlighted item, and the first
 Down highlights the first item (gpui-component's default: `select_down` with
 no selection picks the first clickable item). The paths that already work
