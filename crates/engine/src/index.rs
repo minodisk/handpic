@@ -211,7 +211,8 @@ pub const FACES_VERSION: i64 = 16;
 /// every row at the gate. A row pass 2 writes or resets goes back to `0`.
 /// `2` takes the other faces from `allfaces::GATE_LOW_RES_CONFIDENCE` (0.6)
 /// instead of `sharpness::FACE_CONFIDENCE` (0.8), the floor the gate counts
-/// from, so a posed group's faces scoring 0.64 to 0.75 are judged too
+/// from, so a posed group's faces scoring 0.64 to 0.75 become candidates too, no
+/// longer left out on their score alone
 /// (`docs/plans/_archived/20261128-candidates-floor/`).
 pub const ALLFACES_VERSION: i64 = 2;
 
