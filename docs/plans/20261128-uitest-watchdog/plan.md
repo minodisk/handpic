@@ -55,3 +55,5 @@ This work adds a watchdog thread to each `Ui`. When one harness phase runs past 
 - **The firing test depends on real time.** It can only be late, never early, so load makes it slower, not flaky, provided its own wait for the report is generous (seconds, against a limit of tens of milliseconds).
 
 ## Progress
+
+- 2026-11-28: Step 1 done (Watchdog in crates/app/src/uitest.rs with its two tests, todo.md section narrowed to the remaining work, docs/agents/app.md, github-actions-workflows.md, CLAUDE.md)
