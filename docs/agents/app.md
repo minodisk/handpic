@@ -4631,6 +4631,15 @@ the message is an `absolute`, full-size, centered child in `muted_foreground` at
   checks the text inside a 240 px preview, taller than in the default
   window, and its click opening the picker, on the test text system's
   synthetic glyph widths.
+- Seen (2026-11-27, Windows 11, debug build with the `screenshot` feature,
+  no folder): with `panelWidths` `{"left":480,"right":480}` in a 1200 px
+  window (the preview's black surround x 481 to 718), the no-folder message
+  wrapped onto three centered lines with its glyphs at x 500 to 696, nothing
+  over the tree or under the meta pane; a synthetic click at the text's
+  center opened the folder picker, one at x 481 or 715 (on a band) and one on
+  the tree at x 420 opened nothing. In a 1600 px window with the default
+  220 px panes it was one line, as before (results in
+  `../plans/_archived/20261127-empty-text-wrap/results.md`).
 - Rule: "the current file's preview failed" is `shown` being
   `Shown::Failed` at `pager.current()` with the 1:1 view off (Tauri's
   `previewFailedSeq === seq && !comparing && !zoomed`; there is no compare
@@ -5056,8 +5065,11 @@ gives it its last width with no code.
   pane's boundary on or left of its line); the pill on hover; every
   release, outside the window included, writing the widths at once (Windows
   delivers the release); the 1:1 re-cut after a drag; the tree at 160 px.
-  Not yet seen: the bands against the no-folder message in a narrow window,
-  and macOS and Linux. the fix for the second finding of that run, words broken mid-word at
+  The bands against the no-folder message in a narrow window are seen on
+  Windows (2026-11-27, see "The preview area says why it shows no photo"; a
+  press at x 485, 5 px inside the tree's line at 480, already opened the
+  picker, so the band's hit edge sat about a pixel nearer the line than the
+  cursor's). Not yet seen: macOS and Linux. the fix for the second finding of that run, words broken mid-word at
   160 px, is Measured (see "A meta pane value that does not fit beside its
   label goes under it") (results in
   `../plans/_archived/20261122-windows-device-checks-resize-scrollbars/results.md`);

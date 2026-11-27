@@ -24,3 +24,10 @@
   (the user's standing rule leaves local CI to the PR's GitHub Actions), so
   only `mise run fmt` and the new test ran locally; clippy, the full app
   suite and the link check are left to the PR's checks.
+
+## Device run (main agent, 2026-11-27)
+
+- Narrow (480 / 480 panes, 1200 px window, no folder): the message wrapped onto three centered lines, glyphs at x 500 to 696 inside the preview's black surround (x 481 to 718). Wide (1600 px, 220 px panes): one line, as before.
+- Clicks under `D:\Photos\tests\.ui-lock` (`SetCursorPos` then three relative `mouse_event` moves, the cursor read with `GetCursorPos` before the press): the text's center opened the picker (`#32770` owned by the app's PID), x 481 and 715 (bands) and x 420 (tree) did not. x 485 opened the picker although the brief recorded x 486 as on the band; the relative moves land a pixel or so off the aimed point, so read the cursor before the press.
+- `PostMessage(WM_CLOSE)` closes the picker and the app window cleanly. PowerShell's `Add-Type` types do not survive between PowerShell tool calls; put them in a dot-sourced `.ps1`.
+- No Pillow in mise's Python; measure captures with `System.Drawing.Bitmap` from PowerShell.
