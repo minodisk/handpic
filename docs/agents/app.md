@@ -380,7 +380,9 @@ Per Zed's `script/linux`: `libfontconfig-dev`, `libwayland-dev`,
 `libx11-xcb-dev`, `libxkbcommon-x11-dev`, `libvulkan1`, plus a Vulkan-capable
 driver at run time. The `app` CI job's Linux leg installs exactly these.
 At run time wgpu falls back to GL through `libEGL.so.1` when no Vulkan
-adapter is found (see the deb's `Depends` rule under "Packaging").
+adapter is found, so the deb depends on `libegl1` as well as `libvulkan1`
+(see the deb's `Depends` rule under "Packaging"; not measured on a
+Vulkan-less machine).
 Since the switch to `gpui-kit` the X11 and Wayland backends are compiled (its
 `x11` and `wayland` features); before, neither was.
 macOS needs the Xcode CLT (Metal), Windows only MSVC.
@@ -858,14 +860,25 @@ packages the built `target/release` binary with a script under
   Vulkan nor Wayland is linked: wgpu (Vulkan and GL backends,
   `gpui-pre-wgpu`) loads `libvulkan.so.1`, or `libEGL.so.1` for GL, and
   GPUI's `wayland-backend` (`client_system`, `dlopen`) loads
-  `libwayland-client.so.0`. `linux.sh` therefore adds `libvulkan1` and
-  `libwayland-client0` by hand; the GL fallback's `libegl1` is left out.
+  `libwayland-client.so.0`. `linux.sh` therefore adds `libvulkan1`, the GL
+  fallback's `libegl1` and `libwayland-client0` by hand. `libegl1` is a
+  plain dependency, not `libvulkan1 | libegl1`: the Vulkan loader alone
+  gives no adapter on a machine without a Vulkan driver, where wgpu's GL
+  fallback then opens `libEGL.so.1`, and the alternative form would let
+  `libvulkan1` alone satisfy it. `libegl1` is small and on every desktop.
+  Not measured on a Vulkan-less machine.
   The deb and the tarball need glibc 2.39 or later (Ubuntu 24.04, Debian
   13); an older distribution needs an older build image.
 - Rule: the deb's `Package` is `handpic`. The Tauri v1.10.0 deb was
   `Package: riffle` (read from `Riffle_1.10.0_amd64.deb`), so the app deb
-  does not upgrade it in place; `Conflicts` / `Replaces` against `riffle` is
-  left to sub-milestone 4's real-device check.
+  does not upgrade it in place, and the control has no `Conflicts` /
+  `Replaces` against `riffle`. Handpic and Riffle are separate products
+  with their own package names, binaries and install paths
+  (`/usr/lib/handpic`), so the two debs install side by side, as Riffle
+  1.10.0 and Handpic 2.1.0 do on Windows (two uninstall entries, seen on
+  2026-11-27); a `Replaces` / `Conflicts` would also make apt remove a
+  Riffle the user may still want. Decided from the packaging, without a
+  real-device deb check.
 - Rule: the one desktop entry is the checked-in
   `dev.minodisk.handpic.desktop` with the bare `Exec=handpic`
   (`datadir.rs` tests it, and `app:install:linux` installs it as is); the
@@ -2963,6 +2976,15 @@ a GPUI `Task` cancels it).
 - Rule: `Index::evict` drops a folder whose `opened_at` is over 30 days old
   with its `last_viewed`; seeding a test index by hand needs a current
   `opened_at`.
+- Seen (2026-11-27, Windows 11, through MCP): on fresh indexes over 1520 and
+  1545 ARW hardlinks, pass 1 at about 120-150 files/s, a `navigate last` at
+  `scanning 1/1545` left the ten cells in view gray at 0.5 s, nine of ten
+  filled at 1.2 s (`scanning 124/1545`) and all at 2.9 s; a `show_photo` jump
+  to the middle at `scanning 455/1520` had its cells filled at 1.0 s with
+  pass 1 at 650/1520; on an open, seven of the ten cells in view filled at
+  0.9 s (`scanning 59/1520`) and all at 1.4 s, not strictly from the current
+  cell outward, since parallel reads finish out of order.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### A preview holds the scan's pause until its image is painted (Measured)
 
@@ -3093,6 +3115,13 @@ so `z` never opens on another file's crop.
   (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`). That
   last part no longer holds: a `z` that shows a held crop now prints one (see
   the next section).
+- Measured on Windows 11 on 2026-11-27 (debug build, through MCP): zoomed on
+  400 ARW, six series of 120 `navigate next` at about 37 ms and one of 400
+  `previous`, 1120 zoomed pages, `PrivateMemorySize64` went 242 MB before,
+  203-210 MB after each short series and 221 MB after the long one, no
+  climb. The 418 to 557 MB growth of the `gpui-zoom-peaking` smoke run did
+  not repeat.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### The 1:1 crop is read ahead of `z` (Measured)
 
@@ -3752,9 +3781,11 @@ canvas's `textBaseline = "top"`.
 `ondemand::read_eyes` runs on `cx.background_spawn` and asks its `current`
 closure before the detection and before the model. The view cannot answer
 from another thread, so `eyes.rs`'s `EyesCache` keeps the latest ticket's id
-in an `Arc<AtomicU64>` the closure compares its own id with; a newer request
-stores its id and a clear (another folder, a re-listing) stores `0`, which no
-ticket has. Opening another folder while a judgment was in its detection
+in an `Arc<AtomicU64>` the closure compares its own id with; a clear (another
+folder, a re-listing) stores `0`, which no ticket has. `EyesCache::request`
+issues no ticket while a judgment is in flight, so while one runs only a
+clear supersedes it; a newer request's id follows only a settle or a clear.
+Opening another folder while a judgment was in its detection
 logged `eyes ... model=0.0ms superseded` on the `marks` hand-check folder,
 twice out of two runs. Only one judgment runs at a time and the file current
 when it settles is asked for next, so 60 presses 30 ms apart over a 300-ARW
@@ -3762,6 +3793,13 @@ folder logged 7 judgments, not 60.
 
 - Rule: hand a background job a cheap `Fn() -> bool` over a shared atomic to
   stop it; do not try to reach the view from the worker thread.
+- Seen (2026-11-27, Windows 11, through MCP): with the `f` overlay on, 60
+  `navigate next` about 8 ms apart logged three `eyes` lines (the file the
+  burst started on, the file current when the first judgment settled after
+  325 ms, about 40 pages in, and the last), and 40 about 35 ms apart logged
+  four; the files passed between are never judged, about one judgment per
+  0.3-0.5 s.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### Key names on Windows are lowercase (Measured)
 
@@ -3807,6 +3845,29 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
   target, release. The first attempt can go unreceived (no outline); repeat it
   once before calling a drop a failure. Close the Explorer window afterwards
   through `Shell.Application`'s `Windows()` by `LocationURL`, not with keys.
+- Rule: on a desktop other sessions share, capture the desktop
+  (`CopyFromScreen`) before any real-pointer step: `WindowFromPoint` naming a
+  `Handpic` window does not make it this session's, and on 2026-11-27 a drag
+  aimed at this session's window landed on another session's Handpic lying
+  over it (its settings layer swallowed the drop). Stop rather than raise the
+  window over their work
+  (`docs/plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
+- Rule: posted messages (`WM_KEYDOWN` / `WM_KEYUP` with the modifier state set
+  by `AttachThreadInput` + `SetKeyboardState`, and clicks posted at client
+  coordinates) reach this session's window whatever lies over it, and cover
+  Tab, Escape, Enter, `Ctrl+Z`, `Ctrl+,` and right and left clicks, the
+  tree's right-click menu included. They cannot start an OLE drag:
+  `DoDragDrop` from an own `IDropSource` failed with `E_FAIL`, and a WinForms
+  one returned nothing with no outline drawn; one attempt left the left
+  button held down until released by hand, so check the button state after a
+  failed attempt.
+- Rule: a short preview (a 125-file Delete preview, a 9-file import preview)
+  ends before a posted key or a capture arrives. Take `ctrl+,` and `reading …`
+  checks on a long one, such as a 500-JPEG import preview. Keep the material
+  in copies and hardlinks outside the photo folders, and use a fresh
+  `--index`, `--settings` and `--log` per launch with `mcpAllowDestructive`
+  off so each folder operation opens its dialog
+  (`docs/plans/_archived/20261127-windows-device-checks-folder-dialogs/learnings.md`).
 - Rule: measure layout by scanning pixel runs along a row or column of a window
   capture (Neutral dark: pane borders `#1a1a1a`, the status row's border
   `#2f2f2f`, the preview's black surround). A no-folder window keeps the photo
@@ -3842,8 +3903,11 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
 - Rule: MCP plus the `screenshot` tool (an app built with `mise run
   app:dev:screenshot`) closes the checks that need only an open, a navigation,
   a setting, a confirmed run or a left click. It cannot close a key press (Tab
-  or Escape in a dialog, `Ctrl+Z`, a held `→`), the IME, a drag, a
-  right-click, a HiDPI display or macOS / Linux. A run confirmed through MCP
+  or Escape in a dialog, `Ctrl+Z`, a held `→`), a `present` /
+  `keypressToPixels` percentile (only a real key press prints a `page` line;
+  MCP `navigate` prints none, though one MCP session can page faster than key
+  repeat), the IME, a drag, a right-click, a menu's click, a Ctrl-click, a
+  HiDPI display or macOS / Linux. A run confirmed through MCP
   with `mcpAllowDestructive` opens no dialog, so the dialog's keys and
   dimmed buttons stay open too. Colors, legibility and text size still need
   the user's eye on the running window.
@@ -4154,6 +4218,10 @@ choosing the circle.
   while idle. Verified on Windows 11 on 2026-11-23: the position `1 / 8`
   stayed at the same x with the circle shown (pass 2) and gone
   (`docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
+  Measured in the other layouts on 2026-11-27: 1379 x 767 with the right
+  pane hidden, 1600 x 767 with both side panes hidden and 1158 x 936 with
+  the strip alone hidden, each the same with the circle shown and gone
+  (`../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
 - Rule: do not use `.loading(true)`: nothing here is indeterminate. Pass 2
   starts at `(0, 0)` and pass 1 can start at a total of 0, so the empty
   track ring shows there.
@@ -4581,6 +4649,32 @@ the message is an `absolute`, full-size, centered child in `muted_foreground` at
   the sort / filter menus are deferred, `occlude()`d layers, and the
   settings an `occlude()`d layer painted after the main layout, so a press
   on them does not reach the message.
+- Rule: the message's text is a `min_w_0` child `div` of the centered
+  container (`debug_selector` `empty-text`), never a bare string child, so
+  it wraps within the canvas less the container's 16 px `p_4` on each side,
+  centered by `text_center`. A bare string child is a flex item whose
+  minimum width is its whole single line (GPUI's text element takes a wrap
+  width only when its width is known or the available width is definite,
+  `elements/text.rs`, as in "A meta pane value that does not fit beside its
+  label goes under it"), so in a narrow preview (`PREVIEW_MIN` is 240 px) it
+  stayed one line, spilling over the tree and under the meta pane. In a wide
+  preview the child's basis is its one-line width, so it is still one line.
+  The 16 px padding is wider than the 5 px drag bands of the pane borders
+  (`pane_handle`), so the wrapped text never reaches them. The click target
+  stays the full-size container, which the bands occlude. The UI test
+  `the_no_folder_message_wraps_inside_a_narrow_preview_and_still_opens_the_picker`
+  checks the text inside a 240 px preview, taller than in the default
+  window, and its click opening the picker, on the test text system's
+  synthetic glyph widths.
+- Seen (2026-11-27, Windows 11, debug build with the `screenshot` feature,
+  no folder): with `panelWidths` `{"left":480,"right":480}` in a 1200 px
+  window (the preview's black surround x 481 to 718), the no-folder message
+  wrapped onto three centered lines with its glyphs at x 500 to 696, nothing
+  over the tree or under the meta pane; a synthetic click at the text's
+  center opened the folder picker, one at x 481 or 715 (on a band) and one on
+  the tree at x 420 opened nothing. In a 1600 px window with the default
+  220 px panes it was one line, as before (results in
+  `../plans/_archived/20261127-empty-text-wrap/results.md`).
 - Rule: "the current file's preview failed" is `shown` being
   `Shown::Failed` at `pager.current()` with the 1:1 view off (Tauri's
   `previewFailedSeq === seq && !comparing && !zoomed`; there is no compare
@@ -5020,8 +5114,11 @@ gives it its last width with no code.
   pane's boundary on or left of its line); the pill on hover; every
   release, outside the window included, writing the widths at once (Windows
   delivers the release); the 1:1 re-cut after a drag; the tree at 160 px.
-  Not yet seen: the bands against the no-folder message in a narrow window,
-  and macOS and Linux. the fix for the second finding of that run, words broken mid-word at
+  The bands against the no-folder message in a narrow window are seen on
+  Windows (2026-11-27, see "The preview area says why it shows no photo"; a
+  press at x 485, 5 px inside the tree's line at 480, already opened the
+  picker, so the band's hit edge sat about a pixel nearer the line than the
+  cursor's). Not yet seen: macOS and Linux. the fix for the second finding of that run, words broken mid-word at
   160 px, is Measured (see "A meta pane value that does not fit beside its
   label goes under it") (results in
   `../plans/_archived/20261122-windows-device-checks-resize-scrollbars/results.md`);
@@ -5454,10 +5551,16 @@ listing itself ran has no scan yet; `opened` cancels the scan it starts when
   capture. With the dialog open `q`, `4` and `ctrl+,` did nothing; Tab moved
   the outline between the run button and `Cancel`; Escape and `Cancel` moved
   nothing; the RAW and both sidecars went to the Recycle Bin. Not observed:
-  opening another folder before the held run's scan ends, and an earlier
-  judgment no longer being undoable after a delete (pending in `todo.md`).
+  an earlier judgment no longer being undoable after a delete (pending in
+  `todo.md`).
   Primary source:
   `../plans/_archived/20261122-windows-device-checks-3/learnings.md`.
+- Seen (2026-11-27, Windows 11, through MCP): a `trash_photos` confirmed
+  during pass 1 reported `held_for_scan` with `Move to Trash: waiting for the
+  scan to finish`, the scan was canceled and the file moved; with another
+  folder opened before the scan ended the operation became `failed` with
+  `dropped: another folder was opened`, the note cleared and the file stayed.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### A trash run is undone through the same gate, and outlives a folder switch (Inferred)
 
@@ -5518,6 +5621,11 @@ leaves it there.
   `../plans/_archived/20261122-windows-device-checks-3/learnings.md` for the
   observation and `../plans/20261122-todo-display-text-fixes/learnings.md`
   for the change.
+- Seen (2026-11-27, Windows 11, through MCP): a restored 3-star file's cell
+  showed its stars; after a cross-folder undo, reopening the run's folder
+  listed the file; a `redo` reported `moving to Trash 0 / 1` (operation
+  `Redo Move to Trash`, running 0/1), then `Moved 1 file to the Trash`.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### The folder operations share one dialog model and live in `folderops.rs` (Inferred)
 
@@ -5648,15 +5756,29 @@ the backdrop's condition and the gate's `Held` variant.
   during the run, and a reopen with nothing to copy had `Run` dimmed and
   `Cancel` focused (results in
   `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
-- Not verified headless: a held sidecar request's dialog opening once the
-  scan ends; Tab back to the run button, and Tab and Escape on the Sequence,
-  Import and Rename by Capture Date dialogs; the dimmed buttons and running
-  note of a sidecar run and of a date rename; `Cancel` focused on a
-  colliding date rename; the strip's marks on a sidecar delete and its
-  undo; `ctrl+,` while a preview reads or a Sequence dialog or run is up; a
-  second Sequence request; the pane's `sequencing n / m`, `reading …` and
-  `importing n / m`; an import's stepping aside, mid-run reopen and cancel.
-  The hand checks are pending in
+- Seen (2026-11-27, Windows 11, keys and clicks posted to the window, the
+  state read through the MCP companion and `screenshot`): Tab moved the
+  outline from the run button to `Cancel` and back on the Rewrite, Sequence,
+  Import and Rename by Capture Date dialogs, and Escape closed each; a
+  125-file Rewrite and a date rename dimmed both buttons under their running
+  note; a Delete Sidecars run took the strip's stars, flag dots and labels
+  and `Ctrl+Z` brought them back; a colliding date rename had `Run`
+  disabled and `Cancel` focused; `ctrl+,` did nothing while an import
+  preview read, with a Sequence dialog up and during a Sequence run; a
+  second `Sequence JPEG Timestamps…` during the preview did nothing; the
+  pane showed `reading …`, `sequencing n / m` and `importing n / m`; a
+  running import's dialog stepped aside, came back on `Import…` with `Run`
+  dimmed and `Cancel` focused, Escape hid it with the run going on, and
+  `Cancel` stopped a run with no `.handpic-tmp` file left; the strip of the
+  open date folder stayed empty until that folder's copies ended (results
+  in
+  `../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
+- Seen (2026-11-23, Windows 11, through MCP): a `rewrite_sidecars` and a
+  `delete_sidecars` during pass 1 of a fresh index noted `waiting for the
+  scan to finish`, and the dialog opened once pass 2 ended (results in
+  `../plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
+- Not verified headless: the strip filling while an import into the open
+  folder runs (it did not on 2026-11-27, above). The hand checks are pending in
   `../plans/20261113-gpui-folder-dialogs/learnings.md` and, for the
   component `Dialog`,
   `../plans/_archived/20261114-gpui-component-adoption/learnings.md`.
@@ -5743,8 +5865,10 @@ the watcher back when the rename fails or the split leaves the folder.
   opened the first date folder; an existing sibling of the date's name
   disabled `Run` (results in
   `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
-- Not verified headless: the reopen keeping the strip's judgments; the hand
-  check is pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
+- Seen (2026-11-27, Windows 11): a one-date rename run from its dialog
+  reopened the folder under its new name with the strip's two stars kept
+  (results in
+  `../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
 
 ### The tree's inline rename is a text input in the row, held by the gate (Inferred)
 
@@ -5824,8 +5948,14 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   apart did open it, borderline with the 500 ms system double-click time.
 - Not verified in the running app: the IME in the editor and a rename
   during an import run; the hand checks are pending in `todo.md`.
+- Seen (2026-11-27, Windows 11, through MCP): while a rename was in flight
+  (2148 index rows carried, 796 ms), eight `open_folder` calls on the folder
+  1-16 ms after the confirm answered all returned `A folder is being renamed;
+  try again in a moment.`; a rename of a folder with no index rows ran in
+  10 ms, before any open arrived.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
-### An import's end posts a system-only notification while inactive (Inferred)
+### An import's end posts a system-only notification while inactive (Measured)
 
 - `import::done_notification` decides and words it: nothing while the main
   window is active, else `Import finished` or `Import canceled` over
@@ -5852,13 +5982,22 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   `Handpic.app` in a trusted location and asks for authorization on the
   first post; Linux needs a notification daemon and cannot retract or
   replace one. Not unit-tested beyond the decision and the text (no
-  `gpui::test` harness here); the hand check on Windows is pending in
-  `../plans/20261116-native-import-notification/learnings.md`.
+  `gpui::test` harness here); the delivery, the click and the active case
+  were checked by hand on Windows (below), the taskbar button's icon and
+  grouping were not.
 - Seen (2026-11-22, Windows 11): an import that ended while the window was
   inactive posted a toast at the desktop's bottom-right with the header
   `Handpic`, the title `Import finished` and the status line's summary as its
   body, under a generic app icon, not Handpic's (results in
-  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
+  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`). On
+  2026-11-27 a cancel with Notepad in front posted `Import canceled` /
+  `Import canceled, 13 files copied`, a finished run `Import finished` /
+  `Imported 18 files (676.5 MB)` about 0.9 s after `Run`, a click on that
+  toast brought the Handpic window to the front, a run with the window kept
+  in front posted nothing for 10 s, and no log had a
+  `failed to register AppUserModelID` or `cannot show a system notification`
+  line (results in
+  `docs/plans/_archived/20261127-windows-device-checks-c6/results.md`).
 
 ## Timings
 
@@ -6153,8 +6292,11 @@ slower disk and is not attributed.
   `robocopy /J` (unbuffered) and use each copy once. Hardlinks of files an
   earlier run read are cached too: pass 1 over them ends before the debug
   window takes keys, so the placeholder phase and a steered-scan check (`End`
-  right after the window opens) cannot be seen. The `zoom` timing lines go to
-  stdout like the `page` lines.
+  right after the window opens) cannot be seen (on 2026-11-27 hardlinks of
+  1500-file folders not opened that session, driven over MCP from the first
+  answer, left pass 1 about 10 s, enough to see both;
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`).
+  The `zoom` timing lines go to stdout like the `page` lines.
 - Rule: to measure the pause itself, press onto files the scan has not read
   (a jump, not the next file); `--auto` only steps to the next file.
 

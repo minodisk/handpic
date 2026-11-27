@@ -21,6 +21,7 @@ use crate::{
     entries_of, file_name,
     filter::Orientation,
     fitted_name, menu, open_index, open_main,
+    panewidths::PaneWidths,
     scan::{Priorities, Running},
     settings,
 };
@@ -475,6 +476,41 @@ fn the_settings_layer_lies_under_the_title_bar_and_fills_the_rest() {
         gpui_kit::Modifiers::default(),
     );
     assert!(settings.read_with(&ui.cx, |settings, _| settings.is_open()));
+}
+
+#[test]
+fn the_no_folder_message_wraps_inside_a_narrow_preview_and_still_opens_the_picker() {
+    // The test text system gives every glyph the same synthetic width, which
+    // puts this message between the narrow preview's 208 px content box and
+    // the default window's preview, so it is one line only when wide.
+    let mut ui = Ui::open();
+    let wide = ui
+        .cx
+        .debug_bounds("empty-text")
+        .expect("the no-folder message is not drawn");
+    ui.update(|view, _| {
+        view.pane_widths = PaneWidths {
+            left: 480.,
+            right: 480.,
+        }
+    });
+    let height = ui.cx.update(|window, _| window.viewport_size().height);
+    ui.cx.simulate_resize(gpui_kit::size(px(1200.), height));
+    ui.cx.run_until_parked();
+    let pad = ui
+        .cx
+        .update(|window, _| gpui_kit::component::window_paddings(window));
+    let bounds = ui
+        .cx
+        .debug_bounds("empty-text")
+        .expect("the no-folder message is not drawn");
+    assert!(bounds.origin.x >= pad.left + px(480. + 16.), "{bounds:?}");
+    assert!(bounds.right() <= pad.left + px(720. - 16.), "{bounds:?}");
+    assert!(bounds.size.height > wide.size.height, "{bounds:?} {wide:?}");
+    assert!(!ui.cx.did_prompt_for_paths());
+    ui.cx
+        .simulate_click(bounds.center(), gpui_kit::Modifiers::default());
+    assert!(ui.cx.did_prompt_for_paths());
 }
 
 #[test]

@@ -1068,15 +1068,36 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   stays 2 on every drive, one cap with no per-drive cap (user decision,
   2026-11-26): on NVMe cap 2 makes pass 1 slower, but pass 1 is fast there
   to begin with, so the cost is small, while the wait the user feels is the
-  preview read on SATA, which cap 2 protects. HDR PQ CR3 is untested.
+  preview read on SATA, which cap 2 protects. HDR PQ CR3 at cap 2 is
+  measured in the next bullet, not on NVMe.
 - The cap does not cover `hevc::to_jpeg` (65-125 ms of CPU per HDR PQ CR3):
   the scan reads through `reader::read_preview_undecoded` /
   `read_full_undecoded` inside the slot and calls `Undecoded::decode` after
   the slot drops, in pass 2 after the read's `yield_to_pause` too, so a
   pause holds the decode back as well. Before the split such a folder paid a
-  calculated 33-63 ms/file at a cap of 2 against 3-6 uncapped; pass 1's
-  ms/file on such a folder at cap 2, before and after, is not measured yet
-  (`todo.md`). The app's preview `load` also decodes after its read, the
+  calculated 33-63 ms/file at a cap of 2 against 3-6 uncapped. Measured on
+  2026-11-27 with the app itself (release builds of `39474bdb`, before the
+  split, and `f5cab4bf`, after; `READ_SLOTS` 2, 22 scan threads) on 300
+  files, 60 hardlinks each of the five sample CR3 that `handpic-cli info`
+  reports with an HEVC preview and full image, on `D:`, so every read after
+  the first run is a cache hit and the figures show the decode held inside
+  the slot, not the disk. Each run had a fresh `--index`, its time taken
+  from the `scan extract:` line over its files; the builds were alternated,
+  three runs each, and the total CPU load of other sessions sampled before
+  each launch:
+
+  | Build  | CPU before | Pass 1 (300 files) | ms/file |
+  | ------ | ---------- | ------------------ | ------- |
+  | before | 42 %       | 28122 ms           | 93.7    |
+  | after  | 52 %       | 5264 ms            | 17.5    |
+  | before | 63 %       | 30535 ms           | 101.8   |
+  | after  | 37 %       | 3833 ms            | 12.8    |
+  | before | 53 %       | 29526 ms           | 98.4    |
+  | after  | 60 %       | 3911 ms            | 13.0    |
+
+  So 94-102 ms/file before against 13-18 after, about 7x; the before figure
+  is above the calculated 33-63 and the gap was not looked into. The app's
+  preview `load` also decodes after its read, the
   decode counted in the `page` line's `decode`, not `read`, and its pause
   still runs to the paint (`hold.rs`), the decode included.
 - `MAX_PAUSE` (1 s): a worker honours a pause for at most that long from when
@@ -1091,7 +1112,8 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   handle on the slots. `acquire` then returns `None` and the worker abandons
   the file, as `extract_unless` does at its other stages.
 - Source: `docs/plans/_archived/20261107-preview-read-gate/learnings.md`, Step 2;
-  the NVMe runs: `docs/plans/_archived/20261123-todo-measurements/learnings.md`, Step 1.
+  the NVMe runs: `docs/plans/_archived/20261123-todo-measurements/learnings.md`, Step 1;
+  the HDR PQ CR3 runs: `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### Scan, on-demand faces and eyes: timings taken through the earlier app (Measured)
 
@@ -1293,6 +1315,12 @@ back into it:
 - Even unfiltered it would terminate: `Index::reconcile_sidecars` reparses a sidecar
   only when its on-disk stat differs from the one `mark_written` stored, so a
   rescan after the app's own write queues nothing.
+- Caveat (Measured, Windows, 2026-11-27): the debounce has no maximum wait, so
+  an unbroken burst never settles. During an import's copy the open date
+  folder's strip stays empty until that folder's copies end. If you change
+  the debounce or re-check an import's strip, check for a maximum wait on
+  `DEBOUNCE` first (a fix is under way in another session)
+  (`docs/plans/_archived/20261127-windows-device-checks-folder-dialogs/learnings.md`).
 
 The price is that an *external* sidecar edit (PhotoLab writing a `.dop`) is not
 picked up live; it lands on the next re-listing (a reopen or the tree's
@@ -1300,10 +1328,9 @@ picked up live; it lands on the next re-listing (a reopen or the tree's
 
 On Windows, `ReadDirectoryChangesW` keeps a handle on the watched directory,
 which pins the watched folder's ancestors against rename while Handpic has it
-open; renaming the open folder itself succeeds (measured in the next entry).
-Whether the watch blocks deleting the folder was not measured (an open item in
-`todo.md`). `set` drops the previous watcher before creating the new one, so
-leaving a folder releases it. A watch that cannot be set (SMB, say) is
+open; renaming the open folder itself succeeds, and deleting is free too (both
+measured in the next entry). `set` drops the previous watcher before creating
+the new one, so leaving a folder releases it. A watch that cannot be set (SMB, say) is
 `log::warn!`ed and ignored: the open must not fail, and a re-listing still
 picks up what changed.
 
@@ -1394,8 +1421,20 @@ of the same shapes in the same run reproduced the result above (the folder
 itself renamed, its parent refused with os error 5). So deleting is like
 renaming for the user: a file manager's delete to the Recycle Bin, a move,
 cannot take a folder holding a watched one; a permanent delete through
-`std::fs` can. A file manager's permanent delete (Shift+Delete) was not
-measured.
+`std::fs` can.
+
+The shell's permanent delete (Explorer's Shift+Delete) is free too, measured
+on 2026-11-27 (Windows 11, a scratch binary on notify 8.2.2, the same
+`NonRecursive` watch on a canonical temp folder holding `a.ARW` and
+`a.xmp`, two runs with the same result): `SHFileOperationW(FO_DELETE)`
+without `FOF_ALLOWUNDO` (flags `FOF_NOCONFIRMATION | FOF_NOERRORUI |
+FOF_SILENT`) returned 0 on the watched folder, its parent and its
+grandparent; each time the name was gone at once and a folder of the same
+name could be created again, and the watcher reported `Remove(Any)` for the
+two files only. The path must be given without the `\\?\` prefix (with it
+the call returns `0x7c`). So the shell's permanent delete behaves like
+`std::fs`'s, unlike its move to the Recycle Bin (results in
+`docs/plans/_archived/20261127-windows-device-checks-c6/results.md`).
 
 Trashing (not renaming) a file inside a watched folder needs no such care: a
 throwaway test put a `notify::recommended_watcher` `NonRecursive` watch on a

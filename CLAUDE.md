@@ -257,7 +257,7 @@ updater's `Handpic-<version>-macos-<arch>.tar.gz` holding `Handpic.app`, also
 `packaging/linux/install.sh` (the per-user install of that tarball under
 `~/.local` after a SHA-256 check, adapted from gpui-kit's guide) and
 `handpic_<version>_amd64.deb` from the `packaging/linux/control` template
-(`Depends` from `dpkg-shlibdeps` plus `libvulkan1` and `libwayland-client0`), also
+(`Depends` from `dpkg-shlibdeps` plus `libvulkan1`, `libegl1` and `libwayland-client0`), also
 `mise run app:package:linux`; `sign.sh`, the zipsign 0.2.2 signature of
 those four updater archives in place, also `mise run app:sign`, run with the
 test key under a dispatch's `update_test_repo` input (`owner/name`), which
