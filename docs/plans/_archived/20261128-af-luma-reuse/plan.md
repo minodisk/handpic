@@ -27,7 +27,7 @@ trusted AF point twice: full-size RGB for the face cue (`af_cue`), then
 grayscale for the sharpness score (`score` -> `sharpness::score_preview`).
 Since `FACES_VERSION` 13 a faced file with no AF point scores from the BT.601
 luma of the cue's RGB decode instead
-([no-af-decode.md](../_archived/20261123-todo-four-closeouts/no-af-decode.md)).
+([no-af-decode.md](../20261123-todo-four-closeouts/no-af-decode.md)).
 Doing the same for a file with a trusted AF point would save the grayscale
 decode, about 4-5 ms on a 1616x1080 ARW preview. On ARW, CR3, NEF, RAF and
 ORF previews that luma differs from mozjpeg's Y channel on about half the
@@ -154,7 +154,7 @@ Rules for the step:
       `sharpness::eye_af_frame`, `decode::decode_rgb`,
       `reader::read_preview`), so the measurement is CLI-only code in
       `crates/cli/src/main.rs`, as Step 2 of
-      [the precedent plan](../_archived/20261123-todo-four-closeouts/plan.md)
+      [the precedent plan](../20261123-todo-four-closeouts/plan.md)
       did for `eye_mid`.
     - Recommended form: a small single-threaded subcommand (working name
       `lumascore <dir|file>...`, over `raw_paths`) rather than new `features`
@@ -181,7 +181,7 @@ Rules for the step:
       Read each folder once untimed first so the page cache is warm.
     - Folders: `D:\photos\2026\2026-09-19` (282 α7 V ARW; 25 face-tracked
       bursts qualified there in
-      [burst-rank.md](../_archived/20261123-todo-four-closeouts/burst-rank.md))
+      [burst-rank.md](../20261123-todo-four-closeouts/burst-rank.md))
       first. Add `D:\photos\2026\2026-09-13-b` (232) only if fewer than about
       30 bursts qualify. Do not go beyond those two without asking
       (`2026-09-13-a` has 622 files). Build with
