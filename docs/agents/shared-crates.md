@@ -881,6 +881,26 @@ and the no-AF DNG folder `2026-02-01`).
   (`measurement.md`, `overlap-measurement.md` beside it) and
   `docs/plans/_archived/20261128-judged-face-box-shape/measurement.md`.
 
+### Pass 3's candidates from 0.6: no false closed, but non-faces on AF frames (Measured)
+
+`allfaces::candidates` takes faces from `GATE_LOW_RES_CONFIDENCE` (0.6), the
+gate's floor, since `ALLFACES_VERSION` 2. Before raising it again or adding
+a filter, know what the 0.6 floor brought (`2026-02-01`, 146 no-AF DNG; the
+first 300 AF ARW of `2026-11-07`).
+
+- 23 faces were added to the judged ones. None was a false closed reading:
+  the 3 read closed were closed.
+- On the AF set, 6 of its 13 added faces were not faces (a jersey number,
+  a ball, a hand, an ear), and 1 was covered by hands. Pass 3 searches at
+  640x448 with no size band, unlike the gate, so 0.6 lets these in. All
+  read open and all were on frames under gate 5, but they add to
+  `Faces judged` and, three of them, to `Faces with soft eyes`. A size band
+  or a higher floor on the AF path is the lever, not the no-AF path.
+- Most low-score faces never count: of 122 candidates 0.6 to 0.8 that got
+  a mesh, `measured` turned down 99. `L1005161` went from 3 judged to 4,
+  not to its gate count of 7.
+- Source: `docs/plans/_archived/20261128-candidates-floor/measurement.md`.
+
 ### A learned discard score over the stored technical features did not hold on fresh folders (Hit)
 
 The plan trained scores (`LR/T`: logistic regression over the preview's

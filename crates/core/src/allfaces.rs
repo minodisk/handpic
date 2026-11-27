@@ -14,11 +14,12 @@
 //! 640x448 one of a frame without an AF point and the low-resolution one of
 //! a frame with one.
 //!
-//! A candidate scores at least `sharpness::FACE_CONFIDENCE`, has a box long
-//! side of at least `eyes::EYES_MIN_FACE` (`candidate::meshes_face`) and is
-//! not the judged face found again (`same_face`: an IoU above
-//! `faces::NMS_THRESHOLD`, or an overlap over the smaller box above
-//! `SAME_FACE_OVERLAP`), which is counted from the cue's own mesh instead.
+//! A candidate scores at least `GATE_LOW_RES_CONFIDENCE`, the gate's floor,
+//! has a box long side of at least `eyes::EYES_MIN_FACE`
+//! (`candidate::meshes_face`) and is not the judged face found again
+//! (`same_face`: an IoU above `faces::NMS_THRESHOLD`, or an overlap over the
+//! smaller box above `SAME_FACE_OVERLAP`), which is counted from the cue's
+//! own mesh instead.
 //! The largest come first, at most `MAX_FACES` faces per frame with the
 //! judged one. A candidate counts only
 //! when its mesh fits the face (`MAX_EYE_OFFSET`) and the model's presence
@@ -39,10 +40,11 @@ use crate::eyes::{
 };
 use crate::faces::{iou, Face, NMS_THRESHOLD};
 use crate::fullsharp::LOW_BELOW;
-use crate::sharpness::FACE_CONFIDENCE;
 
 /// The most faces judged per frame, the judged face included. No frame of
-/// the measured folders had more than 4 candidates.
+/// the measured folders had more than 6 candidates at the 0.6 floor (4 at
+/// 0.8), so none reached the cap (the candidates-floor plan's
+/// `measurement.md`).
 pub const MAX_FACES: usize = 8;
 /// A candidate's mesh whose eyes sit farther than this from its YuNet eye
 /// landmarks, in face box sides (`candidate::mesh_eye_offset`), is fitted
@@ -55,14 +57,16 @@ pub const GATE_MIN_SIZE: f32 = 0.5;
 /// the gate with.
 pub const GATE_MAX_SIZE: f32 = 2.0;
 /// The score floor of a face counted toward the gate, under
-/// `FACE_CONFIDENCE`, on both searches. On the low-resolution
-/// `faces::GATE_INPUT` search of a frame with an AF point the small faces
-/// score 0.6 to 0.8 at 320x224, and at this floor the search counts about as
-/// many faces as the 640x448 one does at `FACE_CONFIDENCE` (see the
-/// all-faces-check plan's `measurement.md`). On the 640x448 search of a frame
-/// without one, members of a posed group score 0.64 to 0.75 too, so the gate
-/// counts from this floor there as well (the gate-floor-no-af plan's
-/// `measurement.md`).
+/// `sharpness::FACE_CONFIDENCE`, on both searches, and of a candidate. On
+/// the low-resolution `faces::GATE_INPUT` search of a frame with an AF
+/// point the small faces score 0.6 to 0.8 at 320x224, and at this floor the
+/// search counts about as many faces as the 640x448 one does at
+/// `FACE_CONFIDENCE` (see the all-faces-check plan's `measurement.md`). On
+/// the 640x448 search of a frame without one, members of a posed group score
+/// 0.64 to 0.75 too, so the gate counts from this floor there as well (the
+/// gate-floor-no-af plan's `measurement.md`). Pass 3's candidates take the
+/// same floor, so a face the gate counts is no longer left out on its score
+/// alone (the candidates-floor plan's `measurement.md`).
 pub const GATE_LOW_RES_CONFIDENCE: f32 = 0.6;
 
 /// The intersection over the smaller of the two boxes' areas above which a
@@ -143,12 +147,12 @@ fn same_face(face: &Face, judged: &Face) -> bool {
 }
 
 /// The candidates among a whole-image detection's `faces`: at or above
-/// `FACE_CONFIDENCE`, accepted by `meshes_face`, not `judged` found again
-/// (`same_face`), the largest box first, at most `limit`.
+/// `GATE_LOW_RES_CONFIDENCE`, accepted by `meshes_face`, not `judged` found
+/// again (`same_face`), the largest box first, at most `limit`.
 pub fn candidates(faces: &[Face], judged: Option<&Face>, limit: usize) -> Vec<Face> {
     let mut found: Vec<Face> = faces
         .iter()
-        .filter(|f| f.score >= FACE_CONFIDENCE && meshes_face(f))
+        .filter(|f| f.score >= GATE_LOW_RES_CONFIDENCE && meshes_face(f))
         .filter(|f| judged.is_none_or(|j| !same_face(f, j)))
         .copied()
         .collect();
@@ -219,6 +223,7 @@ mod tests {
         EYES_CLOSED_EAR, EYES_MIN_FACE, EYES_MIN_PRESENCE, LANDMARKS, LEFT_EYE_CONTOUR,
         RIGHT_EYE_CONTOUR, SIDE_FACE_EYE_DISTANCE, SIDE_FACE_PRESENCE,
     };
+    use crate::sharpness::FACE_CONFIDENCE;
 
     fn face(x: f32, side: f32, score: f32) -> Face {
         Face {
@@ -237,19 +242,25 @@ mod tests {
 
     #[test]
     fn a_candidate_is_confident_large_enough_and_not_the_judged_face() {
-        let shy = face(0.0, 100.0, FACE_CONFIDENCE.next_down());
+        let shy = face(0.0, 100.0, GATE_LOW_RES_CONFIDENCE.next_down());
         let small = face(200.0, EYES_MIN_FACE.next_down(), 0.95);
-        let floor = face(400.0, EYES_MIN_FACE, FACE_CONFIDENCE);
+        let floor = face(400.0, EYES_MIN_FACE, GATE_LOW_RES_CONFIDENCE);
         let judged = face(600.0, 100.0, 0.9);
         // The same face as detected on the crop: shifted, IoU well above 0.3.
         let crop = face(610.0, 95.0, 0.85);
         let near = face(680.0, 100.0, 0.9);
-        let all = [shy, small, floor, judged, near];
-        assert_eq!(candidates(&all, Some(&crop), MAX_FACES), [near, floor]);
-        assert_eq!(candidates(&all, Some(&judged), MAX_FACES), [near, floor]);
+        // Under the cue's floor, over the gate's: a candidate all the same.
+        let low = face(900.0, 80.0, 0.7);
+        assert!(low.score < FACE_CONFIDENCE);
+        let all = [shy, small, floor, judged, near, low];
+        assert_eq!(candidates(&all, Some(&crop), MAX_FACES), [near, low, floor]);
+        assert_eq!(
+            candidates(&all, Some(&judged), MAX_FACES),
+            [near, low, floor]
+        );
         assert_eq!(
             candidates(&all, None, MAX_FACES),
-            [judged, near, floor],
+            [judged, near, low, floor],
             "without a judged face every confident large face is a candidate"
         );
         assert!(iou(&near, &judged) <= NMS_THRESHOLD);

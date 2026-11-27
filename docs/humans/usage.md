@@ -234,7 +234,7 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   runs and following the number when you change it. Elsewhere it judges the
   one face only: a blinking bystander gets no mark. Either way a face under
   about 60 pixels on the embedded preview is not judged, and on a group
-  photo neither is a face the detector scores under 0.8 or one past the
+  photo neither is a face the detector scores under 0.6 or one past the
   eight largest, so a frame without the mark is not proof that nobody
   blinked. A profile or a downcast look can
   read as closed, as the `Eyes` row can. It is a
@@ -373,7 +373,7 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   `Faces in a group photo` number (see **Group photos**). On a frame whose
   count reached that number, the third pass's counts follow: `Faces judged`
   (the judged face and the other faces of 60 pixels or more with a detection
-  score of 0.8 or more, at most eight, whose face mesh fits), `Faces with
+  score of 0.6 or more, at most eight, whose face mesh fits), `Faces with
   closed eyes` and `Faces with soft eyes` (eyes under 0.110 on the full-size
   JPEG; left out for a file with no JPEG larger than the preview). Each is
   left out until the pass reaches the frame, and all three are on a frame

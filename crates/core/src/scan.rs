@@ -1867,7 +1867,7 @@ mod tests {
         let never = AtomicBool::new(false);
         let cue = Cue::default();
         assert_eq!(other_faces(&cue, None, None, 1, &never), Some(None));
-        let shy = scored(FACE_CONFIDENCE.next_down(), 100.0);
+        let shy = scored(allfaces::GATE_LOW_RES_CONFIDENCE.next_down(), 100.0);
         assert_eq!(
             other_faces(&cue, Some(&[shy]), None, 1, &never),
             Some(Some(Vec::new())),

@@ -210,7 +210,7 @@ DxO PhotoLab.
   number, the same icon also marks a blink the third pass found on any
   face, and the meta pane shows `Faces judged`, `Faces with closed eyes`
   and `Faces with soft eyes` (faces of 60 px or more and a detection score
-  of 0.8 or more, at most eight, so a frame without the mark can still hold
+  of 0.6 or more, at most eight, so a frame without the mark can still hold
   an unjudged blink), next to `Similar faces`, the second pass's count of
   same-size faces, shown on every frame to help choose the number; off the
   group frames the icon judges the one face only, and a face under 60 px is
