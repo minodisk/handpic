@@ -16,7 +16,7 @@ over the smaller box's area), the score, both boxes' `width` and `height` and
 
 Files read: 36, the frames of the table "Every counted pair at or under IoU
 0.3 with an overlap of 0.3 or more" of
-[overlap-measurement.md](../_archived/20261126-judged-face-eye-match/overlap-measurement.md)
+[overlap-measurement.md](../20261126-judged-face-eye-match/overlap-measurement.md)
 whose overlap is at or under 0.55: 35 of `D:/photos/2026/2026-11-07` and
 `2026-09-19/_DSC3290`, all AF frames, read only. One run, about 9 s.
 

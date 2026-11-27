@@ -25,9 +25,9 @@ above `SAME_FACE_OVERLAP` (0.55). A second box of the same face (on the ear,
 larger, partial) overlapping by about 0.3 to 0.55 is still counted twice,
 mostly in the 320x224 gate count. Neither the eye landmarks nor the overlap
 separate those twins from different people (see
-[measurement.md](../_archived/20261126-judged-face-eye-match/measurement.md)
+[measurement.md](../20261126-judged-face-eye-match/measurement.md)
 and
-[overlap-measurement.md](../_archived/20261126-judged-face-eye-match/overlap-measurement.md)).
+[overlap-measurement.md](../20261126-judged-face-eye-match/overlap-measurement.md)).
 
 This plan closes the `todo.md` section "Core: the judged face can be counted
 twice in the all-faces counts and the gate count (all-faces-check)" one way
@@ -90,7 +90,7 @@ rules are out of scope.
     - `mise run ci:local` passes locally and the PR's GitHub checks pass.
   - Implementation approach:
     - Data. The pairs are the rows of
-      [overlap-measurement.md](../_archived/20261126-judged-face-eye-match/overlap-measurement.md)'s
+      [overlap-measurement.md](../20261126-judged-face-eye-match/overlap-measurement.md)'s
       table "Every counted pair at or under IoU 0.3 with an overlap of 0.3 or
       more" whose overlap is at or under 0.55: by a count of that table,
       24 same-face pairs, 10 different-person pairs, 3 spurious boxes and
