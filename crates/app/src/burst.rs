@@ -196,6 +196,30 @@ pub fn burst_frame_step(ids: &[i64], current: usize, direction: isize) -> usize 
     }
 }
 
+/// Each frame's 1-based rank within its burst, given every frame's
+/// `(full_eye_sharp, sharpness)` in capture order: the frames with a
+/// full-size eye sharpness by it, higher first, then the frames with only a
+/// preview sharpness by that, higher first (the two scales are never
+/// compared), equal scores in capture order. A frame with neither score has
+/// no rank.
+pub fn burst_ranks(scores: &[(Option<f64>, Option<f64>)]) -> Vec<Option<usize>> {
+    let mut scored: Vec<(usize, u8, f64)> = scores
+        .iter()
+        .enumerate()
+        .filter_map(|(at, &(eye, sharpness))| match (eye, sharpness) {
+            (Some(eye), _) => Some((at, 0, eye)),
+            (None, Some(sharpness)) => Some((at, 1, sharpness)),
+            (None, None) => None,
+        })
+        .collect();
+    scored.sort_by(|(_, tier, a), (_, other, b)| tier.cmp(other).then(b.total_cmp(a)));
+    let mut ranks = vec![None; scores.len()];
+    for (rank, (at, _, _)) in scored.into_iter().enumerate() {
+        ranks[at] = Some(rank + 1);
+    }
+    ranks
+}
+
 /// `rejectRest`: every other member of `current`'s burst over `all` (so one
 /// the filter hides too) that is not a reject yet, rejected with its stars
 /// and label kept, its label known when the index has told the view it.
@@ -687,5 +711,54 @@ mod reject_rest_tests {
                 .is_empty()
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod rank_tests {
+    use super::burst_ranks;
+
+    #[test]
+    fn frames_with_a_full_eye_sharpness_rank_by_it_higher_first() {
+        let ranks = burst_ranks(&[
+            (Some(0.12), Some(300.)),
+            (Some(0.25), Some(100.)),
+            (Some(0.18), Some(200.)),
+        ]);
+        assert_eq!(ranks, [Some(3), Some(1), Some(2)]);
+    }
+
+    #[test]
+    fn frames_without_one_rank_by_sharpness_higher_first() {
+        let ranks = burst_ranks(&[(None, Some(120.)), (None, Some(340.)), (None, Some(80.))]);
+        assert_eq!(ranks, [Some(2), Some(1), Some(3)]);
+    }
+
+    #[test]
+    fn a_sharpness_only_frame_ranks_below_every_full_eye_sharpness_frame() {
+        let ranks = burst_ranks(&[
+            (None, Some(9999.)),
+            (Some(0.11), Some(50.)),
+            (None, Some(10.)),
+            (Some(0.2), None),
+        ]);
+        assert_eq!(ranks, [Some(3), Some(2), Some(4), Some(1)]);
+    }
+
+    #[test]
+    fn a_frame_with_neither_score_has_no_rank() {
+        let ranks = burst_ranks(&[(None, None), (Some(0.2), None), (None, Some(5.))]);
+        assert_eq!(ranks, [None, Some(1), Some(2)]);
+    }
+
+    #[test]
+    fn equal_scores_keep_capture_order() {
+        let ranks = burst_ranks(&[
+            (None, Some(7.)),
+            (Some(0.2), None),
+            (None, Some(7.)),
+            (Some(0.2), Some(1.)),
+        ]);
+        assert_eq!(ranks, [Some(3), Some(1), Some(4), Some(2)]);
     }
 }
