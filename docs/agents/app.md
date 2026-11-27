@@ -2962,6 +2962,15 @@ a GPUI `Task` cancels it).
 - Rule: `Index::evict` drops a folder whose `opened_at` is over 30 days old
   with its `last_viewed`; seeding a test index by hand needs a current
   `opened_at`.
+- Seen (2026-11-27, Windows 11, through MCP): on fresh indexes over 1520 and
+  1545 ARW hardlinks, pass 1 at about 120-150 files/s, a `navigate last` at
+  `scanning 1/1545` left the ten cells in view gray at 0.5 s, nine of ten
+  filled at 1.2 s (`scanning 124/1545`) and all at 2.9 s; a `show_photo` jump
+  to the middle at `scanning 455/1520` had its cells filled at 1.0 s with
+  pass 1 at 650/1520; on an open, seven of the ten cells in view filled at
+  0.9 s (`scanning 59/1520`) and all at 1.4 s, not strictly from the current
+  cell outward, since parallel reads finish out of order.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### A preview holds the scan's pause until its image is painted (Measured)
 
@@ -3092,6 +3101,13 @@ so `z` never opens on another file's crop.
   (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`). That
   last part no longer holds: a `z` that shows a held crop now prints one (see
   the next section).
+- Measured on Windows 11 on 2026-11-27 (debug build, through MCP): zoomed on
+  400 ARW, six series of 120 `navigate next` at about 37 ms and one of 400
+  `previous`, 1120 zoomed pages, `PrivateMemorySize64` went 242 MB before,
+  203-210 MB after each short series and 221 MB after the long one, no
+  climb. The 418 to 557 MB growth of the `gpui-zoom-peaking` smoke run did
+  not repeat.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### The 1:1 crop is read ahead of `z` (Measured)
 
@@ -3749,9 +3765,11 @@ canvas's `textBaseline = "top"`.
 `ondemand::read_eyes` runs on `cx.background_spawn` and asks its `current`
 closure before the detection and before the model. The view cannot answer
 from another thread, so `eyes.rs`'s `EyesCache` keeps the latest ticket's id
-in an `Arc<AtomicU64>` the closure compares its own id with; a newer request
-stores its id and a clear (another folder, a re-listing) stores `0`, which no
-ticket has. Opening another folder while a judgment was in its detection
+in an `Arc<AtomicU64>` the closure compares its own id with; a clear (another
+folder, a re-listing) stores `0`, which no ticket has. `EyesCache::request`
+issues no ticket while a judgment is in flight, so while one runs only a
+clear supersedes it; a newer request's id follows only a settle or a clear.
+Opening another folder while a judgment was in its detection
 logged `eyes ... model=0.0ms superseded` on the `marks` hand-check folder,
 twice out of two runs. Only one judgment runs at a time and the file current
 when it settles is asked for next, so 60 presses 30 ms apart over a 300-ARW
@@ -3759,6 +3777,13 @@ folder logged 7 judgments, not 60.
 
 - Rule: hand a background job a cheap `Fn() -> bool` over a shared atomic to
   stop it; do not try to reach the view from the worker thread.
+- Seen (2026-11-27, Windows 11, through MCP): with the `f` overlay on, 60
+  `navigate next` about 8 ms apart logged three `eyes` lines (the file the
+  burst started on, the file current when the first judgment settled after
+  325 ms, about 40 pages in, and the last), and 40 about 35 ms apart logged
+  four; the files passed between are never judged, about one judgment per
+  0.3-0.5 s.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### Key names on Windows are lowercase (Measured)
 
@@ -3862,8 +3887,11 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
 - Rule: MCP plus the `screenshot` tool (an app built with `mise run
   app:dev:screenshot`) closes the checks that need only an open, a navigation,
   a setting, a confirmed run or a left click. It cannot close a key press (Tab
-  or Escape in a dialog, `Ctrl+Z`, a held `→`), the IME, a drag, a
-  right-click, a HiDPI display or macOS / Linux. A run confirmed through MCP
+  or Escape in a dialog, `Ctrl+Z`, a held `→`), a `present` /
+  `keypressToPixels` percentile (only a real key press prints a `page` line;
+  MCP `navigate` prints none, though one MCP session can page faster than key
+  repeat), the IME, a drag, a right-click, a menu's click, a Ctrl-click, a
+  HiDPI display or macOS / Linux. A run confirmed through MCP
   with `mcpAllowDestructive` opens no dialog, so the dialog's keys and
   dimmed buttons stay open too. Colors, legibility and text size still need
   the user's eye on the running window.
@@ -5445,10 +5473,16 @@ listing itself ran has no scan yet; `opened` cancels the scan it starts when
   capture. With the dialog open `q`, `4` and `ctrl+,` did nothing; Tab moved
   the outline between the run button and `Cancel`; Escape and `Cancel` moved
   nothing; the RAW and both sidecars went to the Recycle Bin. Not observed:
-  opening another folder before the held run's scan ends, and an earlier
-  judgment no longer being undoable after a delete (pending in `todo.md`).
+  an earlier judgment no longer being undoable after a delete (pending in
+  `todo.md`).
   Primary source:
   `../plans/_archived/20261122-windows-device-checks-3/learnings.md`.
+- Seen (2026-11-27, Windows 11, through MCP): a `trash_photos` confirmed
+  during pass 1 reported `held_for_scan` with `Move to Trash: waiting for the
+  scan to finish`, the scan was canceled and the file moved; with another
+  folder opened before the scan ended the operation became `failed` with
+  `dropped: another folder was opened`, the note cleared and the file stayed.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### A trash run is undone through the same gate, and outlives a folder switch (Inferred)
 
@@ -5509,6 +5543,11 @@ leaves it there.
   `../plans/_archived/20261122-windows-device-checks-3/learnings.md` for the
   observation and `../plans/20261122-todo-display-text-fixes/learnings.md`
   for the change.
+- Seen (2026-11-27, Windows 11, through MCP): a restored 3-star file's cell
+  showed its stars; after a cross-folder undo, reopening the run's folder
+  listed the file; a `redo` reported `moving to Trash 0 / 1` (operation
+  `Redo Move to Trash`, running 0/1), then `Moved 1 file to the Trash`.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### The folder operations share one dialog model and live in `folderops.rs` (Inferred)
 
@@ -5831,6 +5870,12 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   apart did open it, borderline with the 500 ms system double-click time.
 - Not verified in the running app: the IME in the editor and a rename
   during an import run; the hand checks are pending in `todo.md`.
+- Seen (2026-11-27, Windows 11, through MCP): while a rename was in flight
+  (2148 index rows carried, 796 ms), eight `open_folder` calls on the folder
+  1-16 ms after the confirm answered all returned `A folder is being renamed;
+  try again in a moment.`; a rename of a folder with no index rows ran in
+  10 ms, before any open arrived.
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`.
 
 ### An import's end posts a system-only notification while inactive (Inferred)
 
@@ -6160,8 +6205,11 @@ slower disk and is not attributed.
   `robocopy /J` (unbuffered) and use each copy once. Hardlinks of files an
   earlier run read are cached too: pass 1 over them ends before the debug
   window takes keys, so the placeholder phase and a steered-scan check (`End`
-  right after the window opens) cannot be seen. The `zoom` timing lines go to
-  stdout like the `page` lines.
+  right after the window opens) cannot be seen (on 2026-11-27 hardlinks of
+  1500-file folders not opened that session, driven over MCP from the first
+  answer, left pass 1 about 10 s, enough to see both;
+  `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`).
+  The `zoom` timing lines go to stdout like the `page` lines.
 - Rule: to measure the pause itself, press onto files the scan has not read
   (a jump, not the next file); `--auto` only steps to the next file.
 
