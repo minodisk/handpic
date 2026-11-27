@@ -199,6 +199,9 @@ run reports the whole list.
 
 ## Phase 0: Planning
 
+When this session already wrote `"state": "done"`, overwrite it with
+`"state": "working"` first (§ Status report).
+
 ### 0.1 Making the plan
 
 ```
@@ -1020,7 +1023,11 @@ work does not fit in one step, **do not quietly keep cramming it into one PR**:
 1. Report every entry of "Decisions taken without asking" (§ Deciding without
    asking) in one list, each with what was decided, the options, and why, or
    say that there were none
-2. If everything the user asked for in this session is done, end the Claude
+2. If everything the user asked for in this session is done, write
+   `"state": "done"` with `leftovers` to `tmp/agent-status.json`
+   (§ Status report), with or without `HERDR_ENV=1`, before the next step
+   sends `/exit`
+3. If everything the user asked for in this session is done, end the Claude
    Code session. When `HERDR_ENV=1`, make this the last tool call of the turn,
    after the final report is written, with the Bash tool's
    `run_in_background: true` and `dangerouslyDisableSandbox: true` (the herdr
@@ -1035,9 +1042,42 @@ work does not fit in one step, **do not quietly keep cramming it into one PR**:
    Windows path and types `C:/Program Files/Git/exit` instead. The worktree stays for the
    `wrangle` skill's reap. Outside herdr, tell the user the session can be
    closed
-3. Do not use the `EndConversation` tool; it is not for finishing tasks
-4. Do not end the session when the run stopped on a failure state or when
-   another request of the session is still pending
+4. Do not use the `EndConversation` tool; it is not for finishing tasks
+5. Do not write `done` or end the session when the run stopped on a failure
+   state or when another request of the session is still pending
+
+## Status report
+
+The main agent writes its state to `tmp/agent-status.json` at the worktree
+root, so a supervisor of parallel sessions (the `wrangle` skill) can tell a
+session waiting on a date or an external condition, one working again and a
+finished one with what it left for the user. **`Read`
+[`references/agent-status.md`](references/agent-status.md) before writing
+it** (the fields and the writing rules are there; the contract is shared with
+the reader, so do not change it).
+
+- **Stopping to wait on a date or an external condition** the user gave
+  ("merge on or after 11-21", "wait for the import"): write
+  `"state": "waiting"` before stopping, with the date (or who / what is
+  awaited) and the condition to resume in `waiting`
+- **Resuming after a `waiting` was written, or ending without resuming**
+  (an abort, a PR merged by another session): overwrite it whole with
+  `"state": "working"` and `summary`, so a stale `waiting` does not make the
+  reader take the session for one to resume
+- **Everything asked in the session is done**: write `"state": "done"` with
+  `leftovers` (§ Finishing the run), before `/exit` is sent, with
+  or without `HERDR_ENV=1`. `leftovers` is what the run reported as left for
+  the user: manual checks of 3.3 / S.5 that could not be run on this OS, a
+  `POST_MERGE_TIMEOUT` whose CI result was not seen, files or folders it
+  created outside the repository and did not remove; `[]` when none
+- **A new develop starting in the same session after a `done`**: overwrite it
+  with `"state": "working"` at the head of Phase 0
+- Anything else (stopped on a failure or an abort with no earlier `waiting`,
+  waiting on a decision, simply working): do not write
+- **A failed write never stops develop.** It is not an error; no retry with
+  `dangerouslyDisableSandbox` and nothing that raises a permission prompt
+- **Only the main agent writes the file.** Subagents never do, and no agent's
+  prompt mentions it
 
 ## Reporting
 
@@ -1067,7 +1107,8 @@ At the end of each phase, report briefly in this format:
   and running the manual checks of 3.3 / S.5 (building and launching the app,
   its MCP calls and screenshots, reading its log, shell commands, installers)
   with writing their `results.md`, the `learnings.md` lines and the guide
-  sentences they update
+  sentences they update, and writing the status file
+  (`tmp/agent-status.json`, § Status report)
 - The main agent never runs `git add` / `git commit` / `git push` /
   `gh pr merge` (those belong to `pr-runner` / `merger` / `settings-promoter` /
   `archive-plan.sh` / `local-review-runner`)

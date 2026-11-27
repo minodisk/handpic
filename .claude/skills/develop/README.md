@@ -787,6 +787,34 @@ pending, the run then ends the Claude Code session (under herdr, a background
 `/exit` sent to its own pane once the turn is idle), so a finished run does not
 hold a pane open.
 
+### The status report (tmp/agent-status.json)
+
+Many develop sessions run in parallel under herdr, and the `wrangle` skill (a
+herdr session supervisor outside this repository) supervises them from their
+panes. The screen alone does not show a session that stopped on purpose until
+a date or an external condition and needs no answer, nor what a finished
+session left for the user to do by hand, and a pane left with only a shell
+after develop's own `/exit` does not tell a finished session from a crashed
+one. So the main agent writes `"waiting"`, `"working"` or `"done"` to
+`tmp/agent-status.json` at the worktree root (SKILL.md's § Status report,
+the contract in
+[`references/agent-status.md`](references/agent-status.md)): `wrangle` leaves
+a waiting session alone until its resume condition holds and reports a
+finished session's `leftovers` before reaping its worktree.
+
+The contract (the path, the field names, the state values) is shared with
+`wrangle`, so it must not change from this side alone; a renamed field would
+silently turn every session into one the reader cannot classify. The file is
+write-only from develop's side: develop never reads it to decide anything but
+its own resume after a compact, and behaves the same with no reader at all,
+which is why `done` is written outside herdr too. Develop does not clean the
+file up either, so a stale one (another tool's session in the same worktree,
+an overwrite that failed after a resume) can remain; the reader judges
+freshness by `updated_at`. A failed write is ignored because the file is a
+hint for a supervisor, not part of develop's work: stopping the run, or
+raising a permission prompt to get around the sandbox, would cost more than
+the reader missing one update.
+
 ## When the user runs `/pr` / `/merge` directly
 
 Outside develop you still need branch prep and local review, so the `pr` skill
