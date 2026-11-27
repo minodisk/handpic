@@ -1341,3 +1341,23 @@ The agent-run-device-checks work (plan: `docs/plans/_archived/20261127-agent-run
 #### TODO
 
 - [ ] Reword the `src/eyes.rs` description in `CLAUDE.md` and the doc comments of `EyesTicket` and `EyesCache::current` so that while a judgment runs only a `clear` supersedes it, and a newer request's id only follows a settle or a clear.
+
+### Agents: the develop README still describes `NEEDS_APPROVAL` as a stopping point
+
+#### Background
+
+`.claude/skills/develop/README.md` still describes `merger`'s `NEEDS_APPROVAL` as a point where develop stops for the user. It does so in the step sequence diagram, in "Folding into one PR" risk 3 and in the "Operational note: using it with `/goal`" section. `.claude/skills/develop/SKILL.md` § Merge merges with a standing approval, except for the release PR and the release-shaping paths. The develop-decide-by-recommendation work (plan: `docs/plans/_archived/20261128-develop-decide-by-recommendation/plan.md`) reworded only the "single point of dialogue" sentence and left the rest. Files: `.claude/skills/develop/README.md`, `.claude/skills/develop/SKILL.md`.
+
+#### TODO
+
+- [ ] Bring the three README places in line with SKILL.md § Merge (merge with a standing approval, stop only for the release PR and the release-shaping paths).
+
+### Agents: confirm the develop session end through herdr `/exit` on a real run (develop-decide-by-recommendation)
+
+#### Background
+
+The develop-decide-by-recommendation work (plan: `docs/plans/_archived/20261128-develop-decide-by-recommendation/plan.md`) made the develop main agent end its Claude Code session after the final report when nothing else is pending. Inside herdr (`HERDR_ENV=1`) it makes `sleep 5; herdr pane send-text "$HERDR_PANE_ID" "/exit"; herdr pane send-keys "$HERDR_PANE_ID" enter` its last tool call, as a background, unsandboxed Bash call, so `/exit` lands once the turn is idle. The `herdr pane send-text` and `herdr pane send-keys` commands were confirmed to exist with `herdr pane --help`. Nothing exercised the call on a real run. The open risk is the timing: the background command's exit re-invokes the main agent close to the moment `/exit` is submitted. Files: `.claude/skills/develop/SKILL.md` (§ Finishing the run).
+
+#### TODO
+
+- [ ] On Windows, in herdr, let one real develop run reach the final `MERGED` with nothing else pending. Check that the "Decisions taken without asking" list is written, that the background `/exit` call is the last tool call, and that `/exit` lands once the turn is idle and the session closes with the worktree left for `wrangle`'s reap. Note whether the command's completion re-invokes the agent before `/exit` is submitted. Done when one real develop run in herdr ends with /exit submitted and the session closed, and SKILL.md § Finishing the run is corrected if it was not. Not runnable here: it needs a real develop run inside herdr to its final `MERGED`, and whether the session closed is the user's to observe.

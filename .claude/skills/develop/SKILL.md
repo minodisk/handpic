@@ -18,7 +18,7 @@ advances purely on their return values and the exit codes of scripts.
 ## Phase layout
 
 ```
-Phase 0  0.1 plan → 0.2 user approval                                  ← no git operations
+Phase 0  0.1 plan → 0.2 present                                        ← no git operations
 Phase 1  1.1 branch → 1.2 persist → 1.3 PR → 1.4 merge
 Phase 2  2.1 branch → 2.2 implement → 2.3 review → 2.4 PR → 2.5 merge   ★repeat per step
 Phase 3  3.1 branch → 3.2 learnings → 3.3 todo → 3.4 settings → 3.5 archive
@@ -75,7 +75,8 @@ bash .claude/skills/develop/scripts/ensure-new-branch.sh {branch-name} [{feature
   `.claude/` diff detection above. The branch names in 2.1 and 3.1 are generated
   deterministically (`{feature-name}-step-{n}` / `chore/archive-{feature-name}`),
   so a leftover branch from a past failure will collide. In that case, ask the
-  user to clean it up
+  user to clean it up: deleting a branch stays a question under § Deciding
+  without asking, since it may be another session's work
 
 ### Starting `pr-runner` and its return values (shared by 1.3 / 2.4 / 3.6 / S.6)
 
@@ -108,19 +109,21 @@ Branch on the terminal state of the return value:
 | ------------------ | --------------------------------------------------------------------------------------------------------------- | -------- |
 | `ready`            | Mergeable. Report the PR URL and go to § Merge                                                                    | ✅       |
 | `merged`           | Already merged (auto-merge, or the user merged it immediately). Go to § Merge anyway, for post-merge, main sync, and branch cleanup | ✅       |
-| `closed`           | Abnormal termination: the PR was closed unmerged. **Do not proceed.** Report the situation and ask for direction | ❌       |
-| `aborted`          | Gave up because it could not handle this automatically. Report with the reason (`draft` / `behind` / `blocked` / `wait_timeout` etc.) and ask for direction | ❌       |
+| `closed`           | Abnormal termination: the PR was closed unmerged. **Do not proceed.** Report the situation and decide the direction per § Deciding without asking | ❌       |
+| `aborted`          | Gave up because it could not handle this automatically. Report with the reason (`draft` / `behind` / `blocked` / `wait_timeout` etc.) and decide the direction per § Deciding without asking | ❌       |
 | `needs_discussion` | The review plan contains `discuss`. See below                                                                     | —        |
 
 `needs_discussion` comes back because `pr-runner` cannot ask the user questions,
-and it is the one point of dialogue:
+so the main agent settles each `discuss` entry per § Deciding without asking:
 
-1. Present each `category: "discuss"` entry of the attached plan JSON (the
-   feedback and its `plan`) to the user with `AskUserQuestion`
-2. Reassign `category` to `fix` / `reject` based on the answer, and rewrite
-   `plan` too
+1. Reassign each `category: "discuss"` entry of the attached plan JSON whose
+   `fix` or `reject` is clearly recommended without asking, and record the
+   decision. Present only the others (the feedback and its `plan`) to the user
+   with `AskUserQuestion`
+2. Reassign `category` to `fix` / `reject` based on the decision or the
+   answer, and rewrite `plan` too
 3. If no `fix` / `reject` entries remain at all, do not re-dispatch: report what
-   is pending and ask for direction
+   is pending and decide the direction per § Deciding without asking
 4. Otherwise re-dispatch `pr-runner` with the converted JSON attached, and when
    it returns, go back to the branching table above
 
@@ -154,6 +157,46 @@ Two things from that contract you will use every time:
   out in any worktree is skipped, but one created and not yet checked out is
   still deleted
 
+### Deciding without asking
+
+**When one option is recommended and clearly better than the others, the main
+agent does not ask the user.** Wherever it would ask the user to decide (an
+open question of the plan, a `discuss` entry, a failure state's direction), it
+takes that option and records the decision: what was decided, the options, and
+why.
+
+It asks, with `AskUserQuestion` (not in prose), only when:
+
+- no option is clearly recommended, or the options are close
+- the action is destructive or irreversible beyond what develop does routinely
+  (for example deleting a branch or work that may be someone else's)
+- a recovery taken under this rule returns the same failure state at the same
+  point: the recommendation is no longer clear, so do not re-dispatch it a
+  second time unasked
+
+These stops stay, whatever looks recommended:
+
+- the release PR (`release-please--branches--main`), which is never merged by
+  an agent on its own (§ Merge)
+- an `approval` line for a release-shaping path (`.github/**`,
+  `release-please-config.json`, `.release-please-manifest.json`) (§ Merge)
+- a change to `planner`'s pinned model (0.1)
+- a `needs_discussion` whose plan JSON is `[]` (a human has to dismiss the
+  review; § Starting `pr-runner`)
+- the case in
+  [`references/pr-merge-lifecycle.md`](references/pr-merge-lifecycle.md) where
+  `merger`'s summary and the corroboration disagree
+
+This rule also governs every "ask the user for direction" in
+[`references/pr-merge-lifecycle.md`](references/pr-merge-lifecycle.md) when
+develop follows it. The reference itself is shared with the `pr` skill and
+keeps its wording; develop reads those lines through this rule.
+
+Keep a "Decisions taken without asking" list in your own context for the whole
+run, and name each new decision in the progress report (§ Reporting) of the
+phase where it was taken, so the record survives a compaction. § Finishing the
+run reports the whole list.
+
 ## Phase 0: Planning
 
 ### 0.1 Making the plan
@@ -183,29 +226,31 @@ directly), the number of steps and the main files being changed, and the
 trade-offs and open questions.
 
 `planner` cannot ask the user questions, so anything genuinely contested comes
-back under "trade-offs and risks" as two options. When the user needs to decide,
-**the main agent asks with `AskUserQuestion`** (do not write the question in
-prose).
+back under "trade-offs and risks" as two options. The main agent settles each
+per § Deciding without asking: a clearly recommended option is taken and
+recorded; only a choice without one goes to the user, **with
+`AskUserQuestion`** (do not write the question in prose).
 
-### 0.2 User approval
+### 0.2 Presenting the plan
 
-Present the plan to the user and get approval.
+Present the plan to the user, then go straight to Phase 1 (or Phase S) when no
+open question is contested.
 
-- If they want changes, go back to 0.1
-- Do not proceed to Phase 1 until there is explicit approval ("OK", "go ahead",
-  etc.)
+- Stop and ask only for a choice that has no clear recommendation (§ Deciding
+  without asking)
+- If the user answers with changes, go back to 0.1
 
-On approval, **the main agent decides the following itself** (do not ask the
-user):
+**The main agent decides the following itself** (do not ask the user):
 
 - **The feature name** (kebab-case, used as the plan directory name). Pick
   something concise from the plan
 - **The branch name** (one of `feature/<topic>` / `fix/<topic>` /
   `docs/<topic>` / `refactor/<topic>` / `chore/<topic>` / `test/<topic>`)
 
-**If `planner` returned exactly one step, say explicitly at approval time that
-you will proceed in single-PR mode (Phase S).** The user can decline and ask for
-the normal mode (Phases 1–3); if they do, follow that.
+**If `planner` returned exactly one step, say explicitly when presenting the
+plan that the run proceeds in single-PR mode (Phase S), and proceed.** The user
+can still interrupt and ask for the normal mode (Phases 1–3); if they do,
+follow that.
 
 ## Phase 1: Persisting the plan
 
@@ -232,10 +277,13 @@ date part never causes a substring miss and a false "no traces".
 Branch on the exit code:
 
 - **exit 0**: No traces. Continue
-- **exit 1**: Traces found. **Do not continue on your own.** Present the listed
-  traces with `AskUserQuestion` and ask whether to continue or abort. The main
-  agent cannot tell whether a trace is "something I made earlier" or "another
-  session working right now", so the judgment belongs to the user
+- **exit 1**: Traces found. Per § Deciding without asking, continue without
+  asking when the traces are clearly unrelated (a substring hit on another
+  feature's name), and record the decision. When a trace could be the same
+  work, present the listed traces with `AskUserQuestion` and ask whether to
+  continue or abort: the main agent cannot tell whether such a trace is
+  "something I made earlier" or "another session working right now", so the
+  judgment belongs to the user
 - **exit 2 / exit 3**: There are no traces to list; this is an error in the
   script or the environment. exit 2 is a bad feature-name argument (not
   kebab-case). exit 3 means the query to origin cannot be trusted, by one of two
@@ -356,7 +404,7 @@ dropped an unrelated later PR's hunks).
 
 If the terminal state is `LOCAL_CHECK_FAILED` (it tried the local checks three
 times, gave up, and stopped without committing), do not go to 2.3: report the
-situation to the user and ask for direction.
+situation to the user and decide the direction per § Deciding without asking.
 
 ### 2.3 Local review
 
@@ -455,19 +503,23 @@ on whichever comes first:
       progress: on `result=completed` follow the `result=completed` handling
       above and keep re-arming; on `result=deadline` come back to this branch
       and check the state again (up to 6 re-arms, about 3 hours; past that,
-      report the situation and ask the user for direction)
+      report the situation and decide the direction per § Deciding without
+      asking)
     - If no response arrived, go to "no response" below
   - No response (either of the above): treat it as a stuck state with the
     grandchild's failure notification undelivered. Check the debris in the
-    working tree (uncommitted diff, the contents of the review history) and
-    report to the user (stop here regardless of how many re-arms were used)
+    working tree (uncommitted diff, the contents of the review history),
+    report to the user and decide the direction per § Deciding without asking
+    (do not wait for the runner again, regardless of how many re-arms were
+    used)
 
 Branch on the terminal state of the return value:
 
 - `APPROVED`: go to 2.4
 - `MAX_ROUNDS_REACHED` / `LOCAL_CHECK_FAILED`: **do not proceed to PR
   creation**. Report the return value (the unresolved feedback, or the
-  give-up report) to the user verbatim and ask for direction
+  give-up report) to the user verbatim and decide the direction per
+  § Deciding without asking
 
 ### 2.4 Creating and watching the PR
 
@@ -477,7 +529,8 @@ to `[ ]` with a reason during review), do not append `Step N complete` and do
 not proceed to PR creation. **An `APPROVED` from local review only guarantees
 the quality of the diff, not that the step's acceptance criteria were met**, so
 the two are tracked separately. In this case, report the reason and the
-remaining work left in the plan file verbatim and ask for direction.
+remaining work left in the plan file verbatim and decide the direction per
+§ Deciding without asking.
 
 If it is `[x]`, **before** creating the PR, append
 `(YYYY-MM-DD) Step N complete` to the Progress section of the plan file with
@@ -686,7 +739,8 @@ Branch on the terminal state of the return value:
 
 - `PROMOTED` / `NO_CHANGES`: go to 3.5
 - `FAILED`: it stopped at JSON validation or similar. Report to the user with
-  the state of the working tree and ask for direction
+  the state of the working tree and decide the direction per § Deciding
+  without asking
 
 ### 3.5 Archiving the plan + tidying auto memory
 
@@ -780,6 +834,8 @@ agents are now allowed to do without asking.
 is the enumeration in the 3.6 PR body (after the fact)**, so do not let what was
 removed and what was added fall out of that body.
 
+On `MERGED`, go to § Finishing the run.
+
 ## Phase S: Single-PR mode (one step)
 
 Run this **instead of** Phases 1–3 for a one-step plan. **Nothing is dropped**
@@ -816,13 +872,15 @@ see the head of Phase S).
 ### S.3 Implementation
 
 Same as 2.2. Start `implementer` on Step 1. On `LOCAL_CHECK_FAILED`, do not go
-to S.4: report the situation to the user and ask for direction.
+to S.4: report the situation to the user and decide the direction per
+§ Deciding without asking.
 
 ### S.4 Local review
 
 Same as 2.3. Start `local-review-runner` (and the 2.3 watchdog in the same
 turn). On `APPROVED`, go to S.5. `MAX_ROUNDS_REACHED` / `LOCAL_CHECK_FAILED` do
-not proceed to PR creation; report instead.
+not proceed to PR creation; report instead and decide the direction per
+§ Deciding without asking.
 
 ### S.5 Wrap-up
 
@@ -835,7 +893,8 @@ it to `[ ]` with a reason during review), do not proceed into the wrap-up
 (learnings extraction onwards). **An `APPROVED` from local review only
 guarantees the quality of the diff, not that the step's acceptance criteria were
 met**, so the two are tracked separately. In this case, report the reason and
-the remaining work left in the plan file verbatim and ask for direction.
+the remaining work left in the plan file verbatim and decide the direction per
+§ Deciding without asking.
 
 If it is `[x]`, run the following in order:
 
@@ -902,7 +961,7 @@ Start it per § Starting `pr-runner`. What to pass:
 
 ### S.7 Merge
 
-Start `merger` per § Merge. `MERGED` completes develop.
+Start `merger` per § Merge.
 
 This PR carries the implementation, plan.md, learnings, `todo.md`, and
 `.claude/settings.json` together, so the read-only check flags `.claude/**` on
@@ -910,6 +969,8 @@ any run that promoted settings. As in 3.7 it merges anyway, with the promoted
 permissions named in the progress report. The rightness of the `todo.md`
 deletions and the learnings additions is checked through **the enumeration in
 the S.6 PR body (after the fact)**.
+
+On `MERGED`, go to § Finishing the run.
 
 ### Recovering from an interruption or failure in S.6 / S.7
 
@@ -928,15 +989,18 @@ in S.5 has not been pushed, and `settings-promoter` has already overwritten the
 Delete the branch and that promotion commit goes with it, leaving the contents
 of `settings.local.json` unrecoverable.
 
-Then report the situation to the user and ask how to resume.
+Then report the situation to the user and decide how to resume per § Deciding
+without asking.
 
 ### When it turns out not to fit in one step (demotion)
 
 If partway through S.3 / S.4, or from their return values, it becomes clear the
 work does not fit in one step, **do not quietly keep cramming it into one PR**:
 
-1. Stop, and report the situation and a re-split proposal to the user for
-   approval (the equivalent of 0.2 again)
+1. Stop, and present the situation and a re-split proposal to the user (the
+   equivalent of 0.2 again): proceed with it when it is clearly recommended,
+   and ask only for a choice without a clear recommendation (§ Deciding without
+   asking)
 2. Rewrite plan.md into multiple steps (restart `planner`, or have the main
    agent update it with `Write`). Nothing has been merged yet, so you are free
    to rewrite it on the same branch and in the same PR
@@ -948,6 +1012,30 @@ work does not fit in one step, **do not quietly keep cramming it into one PR**:
 4. If the implementation is still small enough that throwing it away is cheaper,
    the user may tell you to discard it and start over from Phase 1 in normal
    mode
+
+## Finishing the run
+
+3.7 and S.7 come here on the final `MERGED`.
+
+1. Report every entry of "Decisions taken without asking" (§ Deciding without
+   asking) in one list, each with what was decided, the options, and why, or
+   say that there were none
+2. If everything the user asked for in this session is done, end the Claude
+   Code session. When `HERDR_ENV=1`, make this the last tool call of the turn,
+   after the final report is written, with the Bash tool's
+   `run_in_background: true` and `dangerouslyDisableSandbox: true` (the herdr
+   CLI fails under the sandbox):
+
+   ```bash
+   sleep 5; herdr pane send-text "$HERDR_PANE_ID" "/exit"; herdr pane send-keys "$HERDR_PANE_ID" enter
+   ```
+
+   so `/exit` lands once the turn is idle. The worktree stays for the
+   `wrangle` skill's reap. Outside herdr, tell the user the session can be
+   closed
+3. Do not use the `EndConversation` tool; it is not for finishing tasks
+4. Do not end the session when the run stopped on a failure state or when
+   another request of the session is still pending
 
 ## Reporting
 
@@ -961,6 +1049,7 @@ At the end of each phase, report briefly in this format:
 - Step: {N}/{Total}
 - Just did: {what you did}
 - Next: {what happens next}
+- Decided without asking: {the decisions taken in this phase; omit the line when none}
 ---
 ```
 
@@ -980,15 +1069,15 @@ At the end of each phase, report briefly in this format:
 - The main agent never runs `git add` / `git commit` / `git push` /
   `gh pr merge` (those belong to `pr-runner` / `merger` / `settings-promoter` /
   `archive-plan.sh` / `local-review-runner`)
-- Apart from the 0.2 approval, there is no user confirmation between steps or
-  during wrap-up (Phase 3 / S.5–S.7) — the plan was agreed in advance, and
-  merges carry a standing approval (§ Merge). The only dialogue points left are
-  the abnormal cases (`settings-promoter`'s `FAILED`, Step 1 not being `[x]`
-  when S.5 starts, and the `aborted` / `FAILED` states below). Learnings
-  additions and `todo.md` deletions and additions are applied without consent,
-  and their content is checked after the fact through the enumeration in the PR
-  body
+- There is no user approval of the plan, nor confirmation between steps or
+  during wrap-up (Phase 3 / S.5–S.7): 0.2 presents the plan and proceeds unless
+  a choice has no clear recommendation, and merges carry a standing approval
+  (§ Merge). Every other dialogue point goes through § Deciding without asking.
+  Learnings additions and `todo.md` deletions and additions are applied without
+  consent, and their content is checked after the fact through the enumeration
+  in the PR body
 - When a subagent returns `aborted` / `closed` / `needs_discussion` /
   `LOCAL_CHECK_FAILED` / `MAX_ROUNDS_REACHED` / `FAILED` / `POST_MERGE_FAILED` /
-  `POST_MERGE_TIMEOUT`, do not move on by yourself: ask the user for direction.
+  `POST_MERGE_TIMEOUT`, report it and decide the direction per § Deciding
+  without asking: take a clearly recommended recovery and record it, else ask.
   `NOT_READY` alone gets one automatic retry (§ Merge)
