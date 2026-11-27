@@ -2428,7 +2428,8 @@ not open.
   menu on any key, the `ctrl+,` included; a trash or folder dialog held by
   the idle gate, and the Cache page's `Clear the index cache?`
   confirmation, open in `Root`'s layer above the settings, with their
-  `backdrop` (deferred, so it paints over the settings layer too). The tree pane's `on_mouse_down_out` is a capture-phase
+  `backdrop` (deferred, so it paints over the settings layer too; it starts
+  below the title bar, so it no longer covers the bar). The tree pane's `on_mouse_down_out` is a capture-phase
   listener that ignores occlusion, so a press inside the settings hands the
   tree's keyboard back to the photo, as a press inside the old dialog did.
   Over the title bar the hover and the gear's tooltip work while the
@@ -4418,8 +4419,8 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   [the plan](../plans/_archived/20261117-native-title-bar-settings/plan.md), Step 1.
 - Rule: the gear opens the settings through `Handpic::open_settings`, the one
   method `key_down`'s `settingsmodal::OPEN_KEY` arm calls too; it applies the
-  refusals itself (the settings already open, a trash or folder-operation
-  dialog open, a folder flow under way), since a click does not pass through
+  refusals itself (the settings already open, a trash, folder-operation or
+  cache dialog open, a folder flow under way), since a click does not pass through
   `key_down`'s early returns. Its tooltip is `Tooltip::new` with
   `settingsmodal::OPEN_TIP`'s text and its key as a `Kbd`
   (`keys::keystroke_of(OPEN_KEY)`), on the wrapping `div`'s `.tooltip`
@@ -4458,9 +4459,41 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   resize edges over the bar (the client's top pixel), Snap Layouts, and a
   stored `windowBounds` restoring without drift. Observed dead: the controls
   and the drag under the trash dialog's and a folder operation's backdrop
-  (they work under the settings); the fix is in flight. Unmeasured:
+  (they work under the settings); the rule below fixes it. Unmeasured:
   double-click to maximize, macOS's traffic lights against the 80 px left
   padding, and Linux under client- and server-side decorations.
+- Rule: the bar is drawn above the dialog layer. The `relative`,
+  `flex_shrink_0` wrapper holding `TitleBar` and the folder-name overlay is
+  wrapped whole in `deferred(..)` at the default priority 0, always, not
+  only while a dialog is open (so the element tree and `TitleBar`'s
+  `window.use_state` do not change when one opens). gpui-component's
+  `Dialog::render` wraps every dialog in a viewport-sized, `occlude()`d
+  `div().id("dialog")` that `Root` paints after the app's content; on
+  Windows `WM_NCHITTEST` asks GPUI's window-control hit test, which answers
+  only for a `WindowControlArea` hitbox in `mouse_hit_test`, and
+  `Frame::hit_test` stops at the first `BlockMouse` hitbox from the top, so
+  under a dialog the bar's `Drag` / `Min` / `Max` / `Close` were never
+  reached (measured 2026-11-27 on Windows 11: minimize, maximize and the
+  drag did nothing under the trash and `Delete Sidecars…` dialogs). A
+  deferred draw is prepainted after the whole normal pass, so the bar's
+  hitboxes come after that `div` and the hit test reaches them first;
+  `Deferred::request_layout` returns the child's layout, so the bar keeps
+  its place in flow. Keep its priority under 10, the dialog host's
+  (`deferred(..).with_priority(10 + layer)`, gpui-base `src/dialog.rs`), so a
+  dialog surface reaching the bar still paints over it; the popups are at
+  `POPUP_PRIORITY` 100 and the tooltips at 200. Shrinking `modal::backdrop`
+  alone would not bring the bar back: it inserts no hitbox, it only dims and
+  keeps the focus. It now starts below the bar, so the bar is not dimmed.
+  The gear is pressable under a dialog, so `open_settings` refuses while
+  `clear.asking()` too (an MCP `clear_cache` without `mcpAllowDestructive`
+  opens that confirmation with the settings closed). The UI test
+  `the_title_bar_lies_above_the_trash_dialog_and_keeps_its_focus` pins the
+  layering through a `#[cfg(test)]` left mouse-down probe on the wrapper
+  (`Handpic::bar_presses`): GPUI's test window never calls the window-control
+  hit test and leaves `start_window_move`, `minimize` and `zoom`
+  `unimplemented!()`, so the test clicks without a move. Inferred from the
+  source and the test until the real-device check in the plan
+  `docs/plans/20261128-title-bar-over-dialogs/plan.md`.
 
 ### Text is typed through gpui-component's `Input` (Inferred)
 
@@ -5484,9 +5517,13 @@ what a key does (`key`); the focus itself is GPUI's.
   priority 10 and up) whose capture-phase mouse-down listener calls
   `prevent_default`, because the dialog's host tracks its own focus handle
   and would take the focus from the focused button on any press outside the
-  buttons (the `Button`s already prevent it on their own press). The
-  component's full-window `dialog` `div` occludes the window, so nothing
-  under it is pressed, hovered or scrolled.
+  buttons (the `Button`s already prevent it on their own press); the
+  listener is window-wide, so a press on the title bar keeps the focus too.
+  The backdrop starts below the title bar (`top(TITLE_BAR_HEIGHT)`), so the
+  bar is not dimmed. The component's full-window `dialog` `div` occludes
+  the window, so nothing under it is pressed, hovered or scrolled, except
+  the title bar, a `deferred` draw whose hitboxes lie above it (see the
+  title bar section; Inferred from the source until a real-device check).
 - Open and close (`modal::Modal`): the view calls `follow_trash` wherever the
   flow changes phase (the start, a dismissal, a run held for a scan's end,
   the run's end); it opens on the flow becoming busy and closes on it going
