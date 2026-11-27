@@ -469,17 +469,6 @@ Files: `crates/engine/src/trash.rs` (`undo_run`, `restore`).
 
 - [ ] Check whether Explorer's own restore cleans up its `$I`, and whether the crate (or Riffle after `restore_all`) can remove the orphan.
 
-### Engine: Delete Permanently cannot remove a read-only file on some platforms
-
-#### Background
-
-From `trash-over-scan` Step 5. A read-only file (a camera's protect flag) goes to the Trash but may fail `remove_file`, depending on the platform. It is then listed as a failure and stays, which is safe, but the user has no way to delete it from Riffle. On Windows 11 on 2026-11-21, `Delete Permanently…` removed a read-only (`attrib +r`) ARW without an error; macOS and Linux are not tried.
-Files: `crates/engine/src/trash.rs` (`remove_one`).
-
-#### TODO
-
-- [ ] On macOS and Linux, delete a read-only file with `Delete Permanently…` and see whether it fails. If it fails, decide whether to clear the read-only flag first or leave it.
-
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 
 #### Background

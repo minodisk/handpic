@@ -3050,4 +3050,42 @@ mod tests {
         assert_eq!(restored.restored.len(), CHUNK + 1);
         assert_eq!(progress, [(CHUNK, CHUNK + 1), (CHUNK + 1, CHUNK + 1)]);
     }
+
+    #[test]
+    fn a_delete_removes_a_read_only_file() {
+        let dir = temp_dir("read-only");
+        let file = dir.join("a.ARW");
+        write(&file);
+        let mut permissions = std::fs::metadata(&file).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&file, permissions).unwrap();
+        assert!(remove_one(&file).is_ok());
+        assert!(!file.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_delete_leaves_a_locked_file_in_place() {
+        let dir = temp_dir("locked");
+        let file = dir.join("a.ARW");
+        write(&file);
+        let locked = std::process::Command::new("chflags")
+            .arg("uchg")
+            .arg(&file)
+            .status()
+            .unwrap();
+        assert!(locked.success());
+        let removed = remove_one(&file);
+        let kept = file.exists();
+        let unlocked = std::process::Command::new("chflags")
+            .arg("nouchg")
+            .arg(&file)
+            .status()
+            .unwrap();
+        assert!(unlocked.success());
+        assert!(removed.is_err());
+        assert!(kept);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

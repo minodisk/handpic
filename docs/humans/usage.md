@@ -501,9 +501,13 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   or `Escape` leaves everything untouched. The status line counts the files
   (`deleting 12 / 300`) and then says how many went ("Deleted 3 files", with
   how many failed); a file that could not be deleted is listed as an error and
-  stays in the folder with its sidecars. Like a move, it stops a running scan,
-  runs as soon as the scan has stopped and then scans the files left; opening
-  another folder meanwhile drops it. The two are refused while either runs.
+  stays in the folder with its sidecars. A read-only file is deleted like any
+  other. On macOS a locked file (Finder's `Locked` box) is listed as an error
+  and stays until you unlock it; Handpic does not unlock it. A camera's
+  protect flag on a memory card can show up on macOS as such a lock. Like a
+  move, it stops a running scan, runs as soon as the scan has stopped and then
+  scans the files left; opening another folder meanwhile drops it. The two are
+  refused while either runs.
 - **Import…**: right-click a folder in the folder tree and choose `Import…`
   to copy the photos under it, at any depth, into one folder per capture date
   under a destination root, skipping what is already there. It is offered on
