@@ -89,3 +89,5 @@ todo item.
       `tools/package/sign-production.sh`.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete.
