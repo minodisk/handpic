@@ -54,3 +54,4 @@ is investigated. Docs only: one step, one PR (single-PR mode).
 ## Progress
 
 - 2026-11-28: Step 1 done (todo.md item under Cross-cutting / other; docs only, the PR's GitHub checks verify)
+- (2026-11-28) Step 1 complete
