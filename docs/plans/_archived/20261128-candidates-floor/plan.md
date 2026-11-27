@@ -271,3 +271,5 @@ the remaining work in it).
   and todo.md change.
 
 ## Progress
+
+(2026-11-28) Step 1 complete

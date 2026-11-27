@@ -1292,3 +1292,39 @@ The develop-decide-by-recommendation work (plan: `docs/plans/_archived/20261128-
 #### TODO
 
 - [ ] On Windows, in herdr, let one real develop run reach the final `MERGED` with nothing else pending. Check that the "Decisions taken without asking" list is written, that the background `/exit` call is the last tool call, and that `/exit` lands once the turn is idle and the session closes with the worktree left for `wrangle`'s reap. Note whether the command's completion re-invokes the agent before `/exit` is submitted. Done when one real develop run in herdr ends with /exit submitted and the session closed, and SKILL.md § Finishing the run is corrected if it was not. Not runnable here: it needs a real develop run inside herdr to its final `MERGED`, and whether the session closed is the user's to observe.
+
+### Core: non-faces among pass 3's candidates on AF frames (candidates-floor)
+
+#### Background
+
+The candidates-floor plan lowered `allfaces::candidates`' floor to `GATE_LOW_RES_CONFIDENCE` (0.6). At that floor the 640x448 whole-image search of an AF frame counts a jersey number, a ball, a hand or an ear as a face: 6 of the 13 added faces on the first 300 ARW of `2026-11-07`, plus one face behind both hands. They read open, so no closed count moved, but they raise `Faces judged` and, for three of them, the soft count (`Anyone soft`). All were on frames under the default gate of 5, so they show only under a lowered `Faces in a group photo`. Measurement: `docs/plans/_archived/20261128-candidates-floor/measurement.md`; plan: `docs/plans/_archived/20261128-candidates-floor/plan.md`.
+
+Files: `crates/core/src/allfaces.rs` (`candidates`), `crates/core/src/scan.rs` (`other_faces`).
+
+#### TODO
+
+- [ ] Decide between a size band relative to the judged face (as the gate has) and a higher floor on the AF path, to drop these non-faces. Either changes the counts, so it needs an `ALLFACES_VERSION` bump. Measure it on the same `2026-11-07` set first.
+
+### Core / CLI: `allfaces` answers unknown on a frame with no judged face but a 0.6 to 0.8 face (candidates-floor)
+
+#### Background
+
+After the candidates-floor change, `whole_image_cue_rgb` gives no RGB without a judged face, and `other_faces` answers unknown when a candidate needs pixels. 14 frames of `2026-02-01` went from `0 0 0` to `- - -` in `handpic-cli allfaces`. The gate count of such a frame is 0, so the app never runs pass 3 on it; only the CLI shows it. Plan: `docs/plans/_archived/20261128-candidates-floor/plan.md`.
+
+Files: `crates/core/src/scan.rs` (`other_faces`, `whole_image_cue_rgb`).
+
+#### TODO
+
+- [ ] Decide whether the CLI's `allfaces` should answer `0 0 0` again on a frame with no judged face (for example by not treating a candidate as needing pixels there), or whether `- - -` is the intended answer, and document it.
+
+### Core: the time cost of pass 3's 0.6 floor is unmeasured on an idle host (candidates-floor)
+
+#### Background
+
+The candidates-floor measurement ran each build once on a shared host. The "before" means were 3 to 4 times the documented ones and single files moved by hundreds of ms either way, so no time delta could be quoted. The cost is estimated from the added mesh count (3.0 per gate frame on the Leica groups, 0.46 on the team sport) at about 44 ms per mesh from the stage profile. Plan: `docs/plans/_archived/20261128-candidates-floor/plan.md`.
+
+Files: `docs/humans/performance.md`, `docs/humans/performance.ja.md`.
+
+#### TODO
+
+- [ ] On an idle host, with the user's go-ahead for repeated runs, alternate the before and after builds as `docs/humans/performance.md` does (`handpic-cli allfaces <files> 1`, fastest of three) on `2026-02-01` and the first 300 ARW of `2026-11-07`, and add the measured per-file times to the "All-faces check (Windows 11)" section of both languages.
