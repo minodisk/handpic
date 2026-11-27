@@ -5672,7 +5672,11 @@ the watcher back when the rename fails or the split leaves the folder.
   watches under the folder). When the split folder was the open one it is
   re-listed if it remains (its watcher put back by the engine), else the
   first date folder opens; a folder the tree asked for during the run opens
-  instead. A file that failed to move goes to the notes as `<name>: could
+  instead, unless that deferred open (`deferred_open`) is the folder the
+  split removed or one under it: `date_folder_ran` takes it out (when
+  `split.removed` and `tree::relation` relates it to `dir`) and the first
+  date folder opens, as for the open folder, so the missing folder is never
+  opened. A file that failed to move goes to the notes as `<name>: could
   not move: <message>`.
 - Seen (2026-11-22, Windows 11): during a scan the date rename was refused
   with `SCAN_RUNNING`; a one-date rename showed the row under its new name,
