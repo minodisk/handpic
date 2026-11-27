@@ -49,8 +49,12 @@ You are given:
      the user's", a platform not built here, a native dialog), record it under
      the same `## Deferred issues (todo candidates)` heading as a **pending
      manual check**: what to verify, on which platform, the steps and the
-     expected result, and that the step's checkbox was ticked on the automated
-     criteria. Do not write it only as a free-form "Pending:" bullet elsewhere
+     expected result, what it needs (the platform, the kind of input: MCP
+     tools and screenshots, the log, a shell command, an installer, or a key
+     press, a drag or the user's eye; and the material: a build, test photos,
+     a camera body), and that the step's checkbox was ticked on the automated
+     criteria. The wrap-up classifies each such check by that record, runs
+     the ones its host can run and files only the rest in `todo.md`. Do not write it only as a free-form "Pending:" bullet elsewhere
      in `learnings.md` (that is how `strip-keep-scroll-on-rescan` and
      `view-menu` recorded theirs, and both got dropped)
    - **Do not edit `todo.md` directly.** In the develop flow, "out-of-scope

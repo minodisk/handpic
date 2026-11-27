@@ -1462,3 +1462,13 @@ Files: `.github/workflows/release.yml`, `.github/workflows/package.yml`, `.claud
 #### TODO
 
 - [ ] Decide whether a feature-less `cargo check` on one `app` job leg is worth its cost (a second GPUI check variant). If so, add it, and update the rule in `docs/agents/app.md` under "The main view opens on GPUI's test platform" to say which job now catches a test-only API in non-test code.
+
+### Agents: `planner.md` should have a plan name the input kind and material of each hands-on Done-when line
+
+#### Background
+
+The agent-run-device-checks work (plan: `docs/plans/_archived/20261127-agent-run-device-checks/plan.md`) made the develop wrap-up run the manual checks this host can run, and file only the rest. `planner.md` was left unchanged, so a plan may still write "Manually verified on Windows" as a Done-when line, with no word on whether an agent can run it or what material it needs. `implementer.md` step 6 now asks a pending check to be recorded with its platform, input kind and material. Files: `.claude/agents/planner.md`, `.claude/agents/implementer.md`, `.claude/skills/develop/SKILL.md` (3.3).
+
+#### TODO
+
+- [ ] Make `planner.md` ask a plan to name, for each hands-on Done-when line, the input kind (agent-runnable or user-only) and the material, consistent with the wrap-up's reason list in `SKILL.md` 3.3 and `implementer.md` step 6.

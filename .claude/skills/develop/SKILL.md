@@ -570,6 +570,7 @@ Agent(
   prompt: "Plan file path: docs/plans/YYYYMMDD-{feature-name}/plan.md
 Path to learnings.md: docs/plans/YYYYMMDD-{feature-name}/learnings.md
 Feature name: {feature-name}
+Host OS: {this host's OS and version, e.g. Windows 11 / macOS 26 / Ubuntu 24.04}
 Task headings being closed out: {the `### ...` headings passed in via the todo skill, or \"none\"}")
 ```
 
@@ -581,14 +582,87 @@ Branch on the terminal state of the return value:
   without user consent. **Apply every deletion regardless of confidence**
   (certain / needs checking) — confidence is information for the 3.6 PR body,
   not a filter. Do not apply deferred judgments; list them in the 3.6 PR body.
-  **Do not commit** (the `pr-runner` in 3.6 commits it all together)
+  Then take the manual-check candidates through § Running the manual checks
+  below. **Do not commit** (the `pr-runner` in 3.6 commits it all together)
 - `NOTHING_TO_DO` / `NO_SOURCES`: skip
 
-The additions include one item per manual check the feature left pending (an
-unmet "verified by hand on ..." Done-when line, or a check `learnings.md`
-records as pending on the user). The main agent applies them like any other
-addition; a check that only appears in a PR body or `learnings.md` is not
-filed.
+#### Running the manual checks
+
+`todo-curator` returns the manual checks the feature left pending (an unmet
+"verified by hand on ..." Done-when line, or a check `learnings.md` records as
+pending) as a list of their own, apart from the additions: each with its steps
+and expected result, its platform, its source, a host classification with a
+one-line reason, the pasteable `todo.md` Markdown to use if it is left, and
+the existing `todo.md` item covering it, if any. With "0 manual checks" there
+is nothing to do here: start no build and no app.
+
+Take the candidates **one at a time**, before 3.4 (so `results.md` is in the
+plan folder when 3.5 moves it):
+
+1. **Classify it** on this host, starting from `todo-curator`'s
+   classification. It is runnable here when everything it asks for can be
+   done by launching the app on this host and checking it through the MCP
+   companion's tools and `screenshot`, reading the app's log, running a shell
+   command, or running the installer, the setup or a packaged build. It stays
+   unrun for one of these reasons only:
+   - it needs another OS than this host's (macOS, Linux, Windows);
+   - it needs hardware this host lacks (a camera body, a HiDPI display and
+     the like);
+   - it needs the user: the user's own photos, the user's by-eye judgment
+     (colors, legibility, feel), or input only the user gives (a key press, a
+     drag, a right-click, a dialog's keys; the agent synthesizes no mouse or
+     keyboard input on the desktop the user and other sessions share).
+
+   A check with one `- [ ]` per platform is run for this host's box only.
+2. **Run the runnable ones.** Build only when at least one candidate is
+   runnable, one build at a time: `mise run app:dev:screenshot` for a check
+   through MCP and screenshots. That is a debug build, so a timed check needs
+   a release build and takes no timing from it. The launch recipe is in
+   `docs/agents/app.md` and is not repeated here: "Driving the window in a
+   real-device run on Windows" (what MCP plus `screenshot` can and cannot
+   close, the Git Bash path rule, the pass 2 batch rule) and the rules under
+   "The MCP companion answers from the view, one channel hop away" (a
+   `--mcp-port` other than 41917, a fresh `--index`, `--settings` and
+   `--log`, `{"mcpEnabled": true}` through `--import-settings`, the previous
+   PID gone before the next launch). Reach the endpoint with whatever MCP
+   client the session has (a script client on the launch's own
+   `--mcp-port`, or a configured MCP server pointed at that port), and quit
+   the app when done. A runnable check that is blocked (the build fails, the
+   test material is not at hand, the port is held) stays unrun, with what
+   blocked it as its reason.
+3. **Record it.** Write the results to `results.md` in the feature's plan
+   folder (`docs/plans/YYYYMMDD-{feature-name}/results.md`): a `## Setup`
+   section (machine, build and commit, launch arguments, test folder), then
+   one section per check headed with its `PASS` / `PARTIAL` / `FAIL`, what was
+   seen, and a `Not done:` line, as in
+   `docs/plans/_archived/20261126-macos-device-checks-mcp/results.md`. Append
+   what the run taught to the feature's `learnings.md` (3.2 has run, so do not
+   re-run `learnings-extractor`), and where a guide sentence under
+   `docs/agents/` names the check as pending or unseen, update it to what was
+   seen, on which date, citing `results.md` by its post-archive path.
+4. **Settle its outcome**; each candidate ends in exactly one:
+   - **Passed whole**: no `todo.md` item. When an existing item covered it,
+     delete this host's box (the item when no box is left). A multi-platform
+     check is settled box by box: it passes whole only when every box was run
+     and passed; otherwise its other-platform boxes end as **Not run**, filed
+     from `todo-curator`'s Markdown with this host's box removed and the
+     Background noting what was seen here
+   - **Passed in part**: an item (new, or the existing one edited) holding
+     only the sub-points not run, each with its reason
+   - **Failed**: a bug item with the reproduction from `results.md`, not
+     fixed in the wrap-up, and named in the PR body
+   - **Not run** (not runnable here, or blocked): an item from
+     `todo-curator`'s Markdown, or the existing item kept
+   - Every box left in `todo.md` for such a check ends with a one-line
+     `Not runnable here: {reason}.`, and when this host's box was run, the
+     item's Background says what was seen here, on which date, and names the
+     post-archive `docs/plans/_archived/YYYYMMDD-{feature-name}/results.md` as
+     a backticked path
+
+**No candidate may be dropped**: each ends as a result in `results.md` or a
+`todo.md` item. `strip-keep-scroll-on-rescan` (#528) and `view-menu` (#545)
+lost their checks because a free-form bullet was read as a one-off task; a
+check that only appears in a PR body or `learnings.md` is not settled.
 
 `archive-plan.sh` in 3.5 only commits what `git mv` staged, so the unstaged
 `todo.md` you edited here cannot get swept into the archive commit.
@@ -657,9 +731,13 @@ Start it per § Starting `pr-runner`. What to pass:
   - The todo headings (`### ...`) **deleted** in 3.3, with the reason and
     confidence
   - The todo headings **added** in 3.3
-  - The todo headings added for **pending manual checks** in 3.3 (or the
-    existing heading they were merged into), so a human can see after the fact
-    that no hands-on check was lost
+  - The **manual checks run** in 3.3, each with its outcome (`PASS` /
+    `PARTIAL` / `FAIL`) and what was seen, with the path of `results.md`; a
+    failed check named with its bug item's heading
+  - The todo headings added for the **manual checks left** in 3.3 (or the
+    existing heading they were merged into), each with its "not runnable
+    here" reason, the blocked ones listed apart, so a human can see after the
+    fact that no hands-on check was lost
   - The todo headings **edited for a partial close-out** in 3.3 (existing items
     whose content was rewritten), with what changed
   - The paths of the existing guides **consolidated** in 3.2, and the gist
@@ -668,7 +746,12 @@ Start it per § Starting `pr-runner`. What to pass:
     and todo). Distinguish "the target was not edited" from "it was reflected
     into the feature records and todo"
 - **Paths to commit**: the existing files under `docs/agents/` consolidated in
-  3.2, and the `todo.md` edited in 3.3. **Pass only what you actually wrote to**
+  3.2 or updated in 3.3, the `todo.md` edited in 3.3, and the archived
+  folder's `results.md` and `learnings.md`
+  (`docs/plans/_archived/YYYYMMDD-{feature-name}/results.md` /
+  `learnings.md`) when they were written: `archive-plan.sh` commits only what
+  `git mv` staged, so a new `results.md` lands under `_archived/` untracked
+  and an appended `learnings.md` unstaged. **Pass only what you actually wrote to**
   (if you wrote to neither, pass nothing; if `settings-promoter` and
   `archive-plan.sh` already committed and there is no diff, `pr-runner` skips
   the commit)
@@ -761,9 +844,10 @@ If it is `[x]`, run the following in order:
    candidates before moving on. Do not commit)
 2. `todo-curator` (same as 3.3; the main agent applies the deletions and
    additions with `Edit` without consent, and deferred judgments go into the
-   S.6 PR body. Pending manual checks become todo items here too: one per
-   unmet "verified by hand on ..." Done-when line or check `learnings.md`
-   records as pending on the user)
+   S.6 PR body. The manual-check candidates go through 3.3's § Running the
+   manual checks: the ones this host can run are run and recorded in the
+   plan folder's `results.md`, and only the rest become todo items, each with
+   its "not runnable here" reason)
 3. `settings-promoter` (same as 3.4; this agent commits)
 4. Append `(YYYY-MM-DD) Step 1 complete` to the plan file's Progress with `Edit`
    (the reason to do it before creating the PR is the same as 2.4)
@@ -795,8 +879,10 @@ Start it per § Starting `pr-runner`. What to pass:
   the wrap-up breakdown (learnings extraction / todo curation / settings
   promotion / archiving). As in 3.6, always include **the deleted todo headings
   with reason and confidence / the added todo headings / the todo headings
-  edited for a partial close-out and what changed / the todo headings added
-  or extended for pending manual checks / the paths of the
+  edited for a partial close-out and what changed / the manual checks run,
+  each with its outcome and what was seen, and the path of `results.md` / the
+  todo headings added or extended for the manual checks left, each with its
+  reason / the paths of the
   consolidated existing guides and the gist / where the record-only items were
   recorded and how todo curation resolved them**
 - **Paths to commit**: both the plan directory's **old path
@@ -886,7 +972,11 @@ At the end of each phase, report briefly in this format:
   plan.md and the 3.2 targets (the existing files under `docs/agents/` and the
   feature's `learnings.md`; `CLAUDE.md` is never written) and `todo.md`,
   appending Progress in 2.4 / S.5, the plain `mv` of the plan directory in S.5
-  (a file move, not a git operation), updating auto memory, and calling scripts
+  (a file move, not a git operation), updating auto memory, calling scripts,
+  and running the manual checks of 3.3 / S.5 (building and launching the app,
+  its MCP calls and screenshots, reading its log, shell commands, installers)
+  with writing their `results.md`, the `learnings.md` lines and the guide
+  sentences they update
 - The main agent never runs `git add` / `git commit` / `git push` /
   `gh pr merge` (those belong to `pr-runner` / `merger` / `settings-promoter` /
   `archive-plan.sh` / `local-review-runner`)
