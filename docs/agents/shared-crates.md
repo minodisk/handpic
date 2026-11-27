@@ -373,6 +373,18 @@ re-listing). Source:
 `docs/plans/_archived/20261123-todo-trash-quit-fixes/learnings.md`, "Step 4
 follow-up".
 
+`restore_all` moves each item's `$R` data file back and leaves its `$I`
+index file in the Recycle Bin folder; Explorer's own restore (the shell verb
+`undelete`) leaves it too, and the shell lists neither, so the orphans pile
+up unseen. In trash 5.2.9 `TrashItem.id` is the `$R` file's path, and the
+`$I` partner is the same folder's name with the leading `$R` replaced by
+`$I` (`trash::index_file_of`), deletable with user permission. So after
+every `restore_all` on Windows, the chunk call (on success and on failure)
+and `restore_item`, the engine deletes the `$I` of each item whose `$R` file
+is gone and whose original path now exists, ignoring errors. All measured on
+2026-11-27 with trash 5.2.9 on Windows 11. Source:
+`docs/plans/20261128-undo-recycle-index-cleanup/plan.md`.
+
 - Source: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md`,
   Steps 1-2.
 

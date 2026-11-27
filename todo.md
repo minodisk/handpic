@@ -484,16 +484,6 @@ Files: `crates/core/src/copy.rs`, `crates/cli/src/main.rs`, `docs/humans/perform
 
 - [ ] Copy the same fresh, never-read files from the card into a destination on a faster or emptier drive (the NVMe `C:`) by `handpic-cli copybench <card-dir> <dst-dir>` and by an Explorer copy, with idle time between runs, and record the MB/s. Done when the table in `docs/humans/performance.md` has the Explorer row and the 8 MiB x 4 defaults and the per-file `sync_all` are confirmed or changed.
 
-### Engine: Undo of Move to Trash leaves an orphaned `$I` file per restored file on Windows
-
-#### Background
-
-Found by `trash-over-scan` Step 4's measurement. trash 5.2.9's Windows `restore_all` moves the `$R` file back and nothing removes its `$I`. Riffle's Undo restores through the same call, so it presumably leaves one for every file it brings back. D: already held 5327 older orphans naming other paths (source not traced, left alone). Each is small and the shell does not list them, but they pile up and cost a file record each. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md` (safety record).
-Files: `crates/engine/src/trash.rs` (`undo_run`, `restore`).
-
-#### TODO
-
-- [ ] Check whether Explorer's own restore cleans up its `$I`, and whether the crate (or Riffle after `restore_all`) can remove the orphan.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 
