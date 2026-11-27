@@ -20,7 +20,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 ## Purpose
 
 On screen (Windows 11, 2026-11-23, finding C of
-[the device check results](../_archived/20261123-windows-device-checks-mcp-visual/results.md))
+[the device check results](../20261123-windows-device-checks-mcp-visual/results.md))
 the strip's stars have a dark outer outline and its face focus icons do not.
 The user wants the strip's marks drawn one way, and wants them to look like the
 stars.
