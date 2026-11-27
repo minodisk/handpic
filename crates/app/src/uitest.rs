@@ -896,3 +896,144 @@ fn canceling_the_trash_dialog_drains_a_held_clear() {
     assert!(running);
     ui.wait_until("the clear's end", |view| !view.clear.running());
 }
+
+/// Presses the right button on the middle of `bounds`' first `width` px, as
+/// a right-click opening a menu does.
+fn right_press(ui: &mut Ui, bounds: gpui_kit::Bounds<gpui_kit::Pixels>, width: f32) {
+    let at = gpui_kit::point(
+        bounds.origin.x + px(width / 2.),
+        bounds.origin.y + bounds.size.height / 2.,
+    );
+    ui.cx.simulate_mouse_down(
+        at,
+        gpui_kit::MouseButton::Right,
+        gpui_kit::Modifiers::default(),
+    );
+    ui.cx.run_until_parked();
+}
+
+/// Whether the right-click menu is open and has the keyboard, the view's
+/// own handle not.
+fn menu_has_keys(ui: &mut Ui) -> bool {
+    use gpui_kit::Focusable as _;
+    let view = ui.view.clone().unwrap();
+    view.update_in(&mut ui.cx, |view, window, cx| {
+        view.context
+            .as_ref()
+            .is_some_and(|open| open.menu.focus_handle(cx).is_focused(window))
+            && !view.focus.is_focused(window)
+    })
+}
+
+/// Whether the menu is closed and the view's handle has the keyboard.
+fn view_has_keys(ui: &mut Ui) -> bool {
+    let view = ui.view.clone().unwrap();
+    view.update_in(&mut ui.cx, |view, window, _| {
+        view.context.is_none() && view.focus.is_focused(window)
+    })
+}
+
+fn clipboard(ui: &Ui) -> Option<String> {
+    ui.cx.read_from_clipboard().and_then(|item| item.text())
+}
+
+#[test]
+fn the_strip_menu_takes_the_arrows_and_enter_and_hands_other_keys_on() {
+    let mut ui = Ui::open();
+    ui.open_folder(&[("a.dng", 1), ("b.dng", 1), ("c.dng", 1)]);
+    let cells = ui
+        .cx
+        .debug_bounds("strip-cells")
+        .expect("the strip is not drawn");
+    let (pitch, cell) = ui.read(|view| {
+        let g = view.strip.geometry();
+        (g.pitch, g.cell_width)
+    });
+    let second = gpui_kit::Bounds {
+        origin: gpui_kit::point(cells.origin.x + px(pitch), cells.origin.y),
+        size: cells.size,
+    };
+    let b = ui.read(|view| view.files[1].to_string_lossy().into_owned());
+
+    right_press(&mut ui, second, cell);
+    assert_eq!(ui.current(), "b.dng");
+    assert!(menu_has_keys(&mut ui), "the right press kept the keyboard");
+    ui.cx.simulate_keystrokes("down up down down");
+    assert!(menu_has_keys(&mut ui), "an arrow closed the menu");
+    assert_eq!(ui.current(), "b.dng");
+    // Select All, the reveal item, then Copy Path.
+    ui.cx.simulate_keystrokes("down enter");
+    assert_eq!(clipboard(&ui).as_deref(), Some(b.as_str()));
+    assert!(view_has_keys(&mut ui));
+
+    ui.cx
+        .write_to_clipboard(gpui_kit::ClipboardItem::new_string(String::new()));
+    right_press(&mut ui, second, cell);
+    // Copy File Name, then back up to Copy Path.
+    ui.cx.simulate_keystrokes("down down down down up enter");
+    assert_eq!(clipboard(&ui).as_deref(), Some(b.as_str()));
+    assert!(view_has_keys(&mut ui));
+
+    right_press(&mut ui, second, cell);
+    ui.cx.simulate_keystrokes("escape");
+    assert!(view_has_keys(&mut ui));
+    assert_eq!(ui.current(), "b.dng");
+
+    right_press(&mut ui, second, cell);
+    ui.cx.simulate_keystrokes("right");
+    assert!(view_has_keys(&mut ui));
+    assert_eq!(ui.current(), "c.dng");
+
+    right_press(&mut ui, second, cell);
+    assert!(menu_has_keys(&mut ui));
+    ui.cx.simulate_keystrokes("p");
+    assert!(view_has_keys(&mut ui));
+    let flag = ui.read(|view| view.judgments.get(&b).map(|s| s.flag));
+    assert_eq!(flag, Some(Flag::Pick));
+    ui.wait_idle("the current file's preview", 3);
+}
+
+#[test]
+fn the_tree_menu_takes_the_arrows_and_enter() {
+    let mut ui = Ui::open();
+    ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);
+    // The temporary folder is hidden, so not in the tree: the first root's
+    // row is pressed instead.
+    ui.wait_until("the tree's roots", |view| {
+        view.roots_loaded && !view.tree_rows.is_empty()
+    });
+    ui.update(|view, _| {
+        view.tree_scroll
+            .scroll_to_item(0, gpui_kit::ScrollStrategy::Top)
+    });
+    let row = ui
+        .cx
+        .debug_bounds("tree-first-row")
+        .expect("the tree's first row is not drawn");
+    let (path, name) = ui.read(|view| {
+        (
+            view.tree_rows[0].path.clone(),
+            view.tree_rows[0].name.clone(),
+        )
+    });
+
+    right_press(&mut ui, row, f32::from(row.size.width));
+    assert!(menu_has_keys(&mut ui), "the right press kept the keyboard");
+    ui.cx.simulate_keystrokes("down up down");
+    assert!(menu_has_keys(&mut ui), "an arrow closed the menu");
+    assert_eq!(ui.current(), "a.dng");
+    // The reveal item, Copy Path, then Copy Folder Name.
+    ui.cx.simulate_keystrokes("down down enter");
+    assert_eq!(clipboard(&ui), Some(name));
+    assert!(view_has_keys(&mut ui));
+
+    right_press(&mut ui, row, f32::from(row.size.width));
+    ui.cx.simulate_keystrokes("down down down up enter");
+    assert_eq!(clipboard(&ui), Some(path));
+    assert!(view_has_keys(&mut ui));
+
+    right_press(&mut ui, row, f32::from(row.size.width));
+    ui.cx.simulate_keystrokes("escape");
+    assert!(view_has_keys(&mut ui));
+    assert_eq!(ui.current(), "a.dng");
+}
