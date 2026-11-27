@@ -113,3 +113,4 @@ light, Catppuccin Latte and Catppuccin Mocha in the same run's screenshots);
       their text.
 
 ## Progress
+- (2026-11-28) Step 1 complete
