@@ -122,14 +122,17 @@ white at 4 %, `button_hover` and `button_active` `#262626`,
 `sidebar_foreground` and `sidebar_accent_foreground` `#fafafa`,
 `sidebar_border` white at 10 %, `sidebar_primary` `#e5e5e5` on
 `sidebar_primary_foreground` `#171717`, and `TitleBar`'s `title_bar`
-`#171717` and `title_bar_border` white at 10 %, as the panes'. In light, the
+`#171717` and `title_bar_border` white at 10 %, as the panes', and
+`Switch`'s off track `switch` `#737373` and its thumb `switch_thumb`
+`#0a0a0a`, the `background`. In light, the
 same fields from shadcn/ui's Neutral light tokens (`neutral.json`'s oklch
 values as hex): `background`, `popover`, `sidebar`, `status_bar`, `title_bar`
 and `button` `#ffffff`, `foreground` `#0a0a0a`, `primary` `#171717` on
 `#fafafa`, `secondary`, `muted`, `accent` and the button hovers `#f5f5f5` with
 `#171717` on them, `muted_foreground` `#737373`, `danger` `#e7000b`
 (`#e91a23` on hover), `border`, `input` and `scrollbar_thumb` `#e5e5e5`,
-`ring` `#a1a1a1`, and the same `overlay`. The registered theme derives the `button_*`,
+`ring` `#a1a1a1`, `switch` `#d4d4d4`, `switch_thumb` `#ffffff`, and the same
+`overlay`. The registered theme derives the `button_*`,
 `*_hover` / `*_active` and `list_*` fields at load and `Theme::update` does
 not derive them again, so the fields it does not name keep `Default Dark`'s
 or `Default Light`'s values. The mode is the setting's (`theme::resolve`):
@@ -2621,8 +2624,12 @@ not open.
   and `input` border. `Radio` is `.small()` (a 14 px indicator) with a
   13 px `text_size`; a checked `Radio` is the component's filled circle with
   the check mark, not the old ring and dot. The `Switch` is the
-  `SettingField::switch`'s, `primary` when on and `Default Dark`'s `switch` /
-  `switch_thumb` (`theme.rs` maps neither). Each key on the Keyboard
+  `SettingField::switch`'s, `primary` when on and the mapped `switch` when
+  off, under the one mapped `switch_thumb` in both states. shadcn/ui's
+  switch lights its thumb when off, but the component paints the thumb with
+  that one token, and a light thumb would vanish on the light on track, so
+  the off track is lightened instead (`#737373` under the `#0a0a0a` thumb in
+  Neutral dark). Each key on the Keyboard
   Shortcuts page is a `Kbd` (the `muted` fill, half the theme radius) with
   its text set back to the old chip's 13 px `foreground`, its `×`
   `small_button` beside it rather than inside, since `Kbd` is not a

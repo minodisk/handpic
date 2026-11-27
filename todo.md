@@ -863,17 +863,6 @@ Files: `crates/app/src/main.rs` (`settings_button`, `open_settings`), `crates/ap
 - [ ] On macOS (`mise run app:dev`), open a folder and look at the title bar. Expect the gear flush at the bar's right edge (no `mr_2` margin), its hover fill filling the bar's height with square corners, the 14 px icon not clipped, and the 18 px app icon and 13 px text looking right beside the traffic lights. A press and drag on the gear should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
 - [ ] On Linux, under client-side decorations, open a folder and look at the title bar. Expect the gear flush beside the window controls, its hover fill filling the bar's height with square corners, the icon not clipped, and the 18 px app icon and 13 px text looking right. A press and drag on the gear should not move the window, the rest of the bar should still drag, and a click should open the settings.
 
-### App: real-device check of the look of the switch and the `Kbd` keys (native-component-controls)
-
-#### Background
-
-The `native-component-controls` feature drew auto-advance as a switch and the Keyboard Shortcuts chips and the right-click menu's shortcuts as `Kbd`. The switch's `switch` / `switch_thumb` tokens are `Default Dark`'s, because `theme.rs` maps neither; the plan decided to map them only if the off state is hard to read on screen. Nobody has looked at it. Mapping them would conflict with `20261115-native-themes` Step 1's rewrite of `map`. The key spelling also changed (`Ctrl+Alt+1`, `Left`, `Esc`). Plan: `docs/plans/_archived/20261116-native-component-controls/plan.md`.
-
-Files: `crates/app/src/settingsview.rs`, `crates/app/src/main.rs` (`context_item`), `crates/app/src/theme.rs`.
-
-#### TODO
-
-- [ ] On Windows, run `mise run app:dev`. In the settings (`ctrl+,`), check that the off auto-advance switch and its thumb read clearly against the settings' `#171717` and that the Keyboard Shortcuts `Kbd` chips (13 px `foreground` on `muted`) look right. Then right-click a strip cell and check that the `Kbd` shortcuts (`Ctrl+Alt+1`, `Space`) are right-aligned in `muted_foreground`. Expected: if the off switch is hard to read, map `switch` / `switch_thumb` in `theme.rs` with the theme test.
 
 ### App: real-device check of the OS notification when an import ends while the window is inactive (native-import-notification)
 
