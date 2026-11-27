@@ -3435,6 +3435,17 @@ after about 11 ms, one retry) and fails the test if it is still held after
 10 s; nothing is written outside it. The smoke test passed 25 runs alone and
 20 runs of the whole crate's tests on Windows.
 
+Each `Ui` also runs a watchdog thread (`Watchdog`) from `open_with` to the
+end of its drop, `cx`'s own drop included (the field declared last). The
+harness sets its phase at each stage of the open, in `wait_until` and
+`update`, at the quit, the folder removal and the context's drop, and on
+return from those calls to `test body, after ...`. A phase older than
+`PHASE_MAX` (60 s) writes the phase, its time and the `Ui`'s log lines with
+`std::io::stderr().write_all` (libtest's capture is lost on an abort) and
+calls `std::process::abort()`, so a hang inside a GPUI call or on a lock
+ends the test binary in about a minute and names where it stopped, instead
+of the CI job's 30-minute limit with no output.
+
 - Rule: build a UI test on `Ui`, wait on the app's threads with
   `wait_until`, never a fixed sleep, and drop the `Ui` to end it.
 - Rule: a UI test that times out is diagnosed from its log lines, not by

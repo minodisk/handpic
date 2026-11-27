@@ -3,9 +3,10 @@
 
 use std::{
     fs,
+    io::Write,
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -28,6 +29,12 @@ use crate::{
 
 /// How long `wait_until` waits on the app's own threads before failing.
 const WAIT: Duration = Duration::from_secs(10);
+
+/// How long one harness phase may run before the watchdog aborts the test
+/// process: a normal phase takes seconds and every wait the harness owns is
+/// bounded by `WAIT`, so a phase past this hung inside a GPUI call or on a
+/// lock, which would otherwise hold the CI job to its own limit.
+const PHASE_MAX: Duration = Duration::from_secs(60);
 
 /// Under every quit handler's drain timeout, so a quit that waits one out
 /// fails the test.
@@ -90,6 +97,76 @@ fn log_lines(dir: &str) -> String {
     })
 }
 
+/// The harness phase under way: its label and when it started.
+struct Phase {
+    label: String,
+    started: Instant,
+}
+
+/// The watchdog's first line, the phase that ran past `limit`.
+fn watchdog_report(label: &str, elapsed: Duration, limit: Duration) -> String {
+    format!(
+        "UI test watchdog: phase `{label}` has run for {:.1}s, over {:.1}s; aborting\n",
+        elapsed.as_secs_f64(),
+        limit.as_secs_f64()
+    )
+}
+
+/// A thread that hands `on_fire` the report once the phase set last has run
+/// past its limit, and ends when the watchdog is dropped.
+struct Watchdog {
+    phase: Arc<Mutex<Phase>>,
+    /// Dropped with the watchdog, which disconnects the thread's wait.
+    _stop: mpsc::Sender<()>,
+}
+
+impl Watchdog {
+    fn start(label: &str, limit: Duration, on_fire: impl FnOnce(String) + Send + 'static) -> Self {
+        let phase = Arc::new(Mutex::new(Phase {
+            label: label.to_owned(),
+            started: Instant::now(),
+        }));
+        let (stop, stopped) = mpsc::channel::<()>();
+        let watched = phase.clone();
+        thread::spawn(move || {
+            loop {
+                let (label, elapsed) = {
+                    let phase = watched.lock().unwrap_or_else(|e| e.into_inner());
+                    (phase.label.clone(), phase.started.elapsed())
+                };
+                if elapsed >= limit {
+                    on_fire(watchdog_report(&label, elapsed, limit));
+                    return;
+                }
+                match stopped.recv_timeout(limit - elapsed) {
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    _ => return,
+                }
+            }
+        });
+        Self { phase, _stop: stop }
+    }
+
+    fn set(&self, label: impl Into<String>) {
+        *self.phase.lock().unwrap_or_else(|e| e.into_inner()) = Phase {
+            label: label.into(),
+            started: Instant::now(),
+        };
+    }
+}
+
+/// Writes the report to stderr, which libtest does not capture and an abort
+/// does not lose, the phase first so it is out even if the hung thread holds
+/// `LOG`, then `dir`'s log lines, and aborts.
+fn abort_with(report: String, dir: &str) {
+    let mut stderr = std::io::stderr();
+    let _ = stderr.write_all(report.as_bytes());
+    let _ = stderr.flush();
+    let _ = stderr.write_all(format!("log:{}\n", log_lines(dir)).as_bytes());
+    let _ = stderr.flush();
+    std::process::abort();
+}
+
 pub struct Ui {
     pub cx: VisualTestContext,
     /// Taken at the drop, so the view goes with the app.
@@ -98,6 +175,8 @@ pub struct Ui {
     scan: Running,
     /// Taken at the drop, which removes it once the app's threads let go.
     dir: Option<TempDir>,
+    /// Last, so it still watches while `cx` drops after `Drop::drop`.
+    watchdog: Watchdog,
 }
 
 impl Ui {
@@ -111,16 +190,28 @@ impl Ui {
     pub fn open_with(args: Args) -> Self {
         install_log();
         let dir = tempfile::tempdir().unwrap();
+        let name = dir
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let watchdog = Watchdog::start("TestAppContext::single", PHASE_MAX, move |report| {
+            abort_with(report, &name)
+        });
         let cx = TestAppContext::single();
         // The view's scan, watchers and writers are threads of their own, so
         // the scheduler may park while they work.
         cx.executor().allow_parking();
+        watchdog.set("opening the index and the settings");
         let index = open_index(Some(dir.path().join("index.sqlite")));
         let settings = settings::load(Some(dir.path().join("settings.sqlite")), None);
+        watchdog.set("open_main");
         let (window, view) = cx
             .update(|cx| open_main(args, index, settings, None, cx))
             .unwrap();
         let mut cx = VisualTestContext::from_window(window, &cx);
+        watchdog.set("setting the scan priorities");
         // Pass 2 at the app's lowest priority starves past `WAIT` behind the
         // other tests running in parallel, on every OS.
         let scan = view.update(&mut cx, |view, _| {
@@ -131,12 +222,15 @@ impl Ui {
             };
             view.scan.clone()
         });
+        watchdog.set("the open's run_until_parked");
         cx.run_until_parked();
+        watchdog.set("test body, after the open");
         Self {
             cx,
             view: Some(view),
             scan,
             dir: Some(dir),
+            watchdog,
         }
     }
 
@@ -151,9 +245,11 @@ impl Ui {
         &mut self,
         update: impl FnOnce(&mut Handpic, &mut Context<Handpic>) -> R,
     ) -> R {
+        self.watchdog.set("update");
         let view = self.view.clone().unwrap();
         let result = view.update(&mut self.cx, update);
         self.cx.run_until_parked();
+        self.watchdog.set("test body, after update");
         result
     }
 
@@ -201,10 +297,13 @@ impl Ui {
     /// letting the app's own threads, which the platform does not run, catch
     /// up in real time; fails the test after `WAIT`.
     pub fn wait_until(&mut self, what: &str, done: impl Fn(&Handpic) -> bool) {
+        self.watchdog.set(format!("waiting for {what}"));
         let started = Instant::now();
         loop {
             self.cx.run_until_parked();
             if self.read(&done) {
+                self.watchdog
+                    .set(format!("test body, after waiting for {what}"));
                 return;
             }
             if started.elapsed() >= WAIT {
@@ -296,19 +395,46 @@ impl Drop for Ui {
         self.view.take();
         if thread::panicking() {
             self.scan.cancel();
+            self.watchdog.set("dropping the test context");
             return;
         }
+        self.watchdog.set("quitting");
         let started = Instant::now();
         self.cx.cx.quit();
         let quit = started.elapsed();
         assert!(quit < QUIT_MAX, "the quit handlers took {quit:?}");
+        self.watchdog.set("removing the temporary folder");
         let dir = self.dir.take().unwrap().keep();
         assert!(
             remove_within(&dir, WAIT),
             "{} is still held after the quit",
             dir.display()
         );
+        self.watchdog.set("dropping the test context");
     }
+}
+
+#[test]
+fn the_watchdog_reports_a_phase_past_its_limit() {
+    let (sender, reports) = mpsc::channel();
+    let _watchdog = Watchdog::start("a stuck phase", Duration::from_millis(20), move |report| {
+        sender.send(report).unwrap()
+    });
+    let report = reports.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert!(report.contains("phase `a stuck phase`"), "{report}");
+}
+
+#[test]
+fn a_watchdog_dropped_before_its_limit_does_not_fire() {
+    let (sender, reports) = mpsc::channel::<String>();
+    let watchdog = Watchdog::start("a phase", PHASE_MAX, move |report| {
+        sender.send(report).unwrap()
+    });
+    drop(watchdog);
+    assert_eq!(
+        reports.recv_timeout(Duration::from_secs(10)),
+        Err(mpsc::RecvTimeoutError::Disconnected)
+    );
 }
 
 #[test]
