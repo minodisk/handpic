@@ -321,8 +321,8 @@ the last as `preview`; with one, it is both.
   big-endian.
 - Every Nikon MakerNote offset is relative to the TIFF header at note offset
   10 (after `Nikon\0`, two version bytes and two more). `af_point` builds a
-  second `Tiff::new(buf, note + 10, note_end)` for it; only `AFInfo2` is read
-  (see below).
+  second `Tiff::new(buf, note + 10, note_end)` for it; only `AFInfo2` and,
+  for a crop mode, `CropHiSpeed` and `CropArea` are read (see below).
 
 ### `AFInfo2`: the offsets depend on the version, top-left origin (Measured)
 
@@ -341,15 +341,48 @@ at byte 0x2a for versions `0300` / `0301` and at 0x3e for `0400` / `0401` /
   `None`, as does a zero position or a zero `AFImage` size.
 - The position is the AF area's center in the unrotated image, origin at the
   top left, Y down, in the `AFImage` frame, which is the full image size
-  (8256x5504 on the Z 9, 5568x3712 on the Z 30). So it maps directly to
-  `FocusLocation { sensor_w: AFImageWidth, sensor_h: AFImageHeight, x, y }`,
-  and the consumers' scaling handles a reduced-size JpgFromRaw.
+  (8256x5504 on the Z 9, 5568x3712 on the Z 30). Uncropped, it maps directly
+  to `FocusLocation { sensor_w: AFImageWidth, sensor_h: AFImageHeight, x, y }`,
+  and the consumers' scaling handles a reduced-size JpgFromRaw (the Z 6:
+  6048x4024 frame, 3024x2016 JPEG, `CropHiSpeed` `11 6064 4040 6064 4040 0 0`).
+- A crop mode (DX on an FX body, 1:1, 16:9) keeps the `AFImage` frame at the
+  uncropped size while the JPEGs hold only the crop. `af_point` takes the
+  crop from two more MakerNote tags: `CropHiSpeed` (0x001b, `int16u[7]`:
+  mode, original width / height, cropped width / height, x, y) declares a
+  crop when the cropped size is no larger on either side and smaller on one,
+  and `CropArea` (0x0045, `int16u[4]`: left, top, width, height) gives its
+  size, which equals the full JPEG's on every sample. When the crop is
+  nonzero and smaller than the `AFImage` frame, the point is moved by the
+  centered offset `((AFImageWidth - width) / 2, (AFImageHeight - height) / 2)`
+  and the frame becomes `width` x `height`; the AF area size is not scaled,
+  and a point outside the crop gives `None`. Any missing or unreadable crop
+  tag leaves today's answer. The size of the JPEG is not the trigger: the
+  uncropped Z 6 above holds a JPEG smaller than its frame.
+- The offset form is backed by metadata: on every crop sample,
+  `CropHiSpeed`'s origin plus the crop's `CropArea` left / top, minus the
+  uncropped frame's `CropArea` left / top, equals `(AFImage - CropArea) / 2`
+  ((1032, 688) Z6III DX, (1008, 0) Z6III 1:1, (0, 316) Z6III 16:9, (928, 0)
+  Z50II 1:1, (0, 292) Z50II 16:9): the crop is the sensor's center,
+  unscaled. Every sample's AF point is at the center, so whether an
+  off-center position stays in the uncropped frame is unconfirmed. Measured
+  on raw.pixls.us samples:
+
+  | Body, mode | `AFImage` frame | `CropArea` w x h | AF position | Mapped |
+  |---|---|---|---|---|
+  | Z6III FX | 6048x4032 | 6048x4032 | (3023, 2016) | unchanged |
+  | Z6III DX | 6048x4032 | 3984x2656 | (3023, 2016) | (1991, 1328) |
+  | Z6III 1:1 | 6048x4032 | 4032x4032 | (3023, 2016) | (2015, 2016) |
+  | Z6III 16:9 | 6048x4032 | 6048x3400 | (3023, 2016) | (3023, 1700) |
+  | Z50II uncropped | 5568x3712 | 5568x3712 | (2789, 1868) | unchanged |
+  | Z50II 1:1 | 5568x3712 | 3712x3712 | (2792, 1868) | (1864, 1868) |
+  | Z50II 16:9 | 5568x3712 | 5568x3128 | (2789, 1865) | (2789, 1573) |
+  | Z5II (1:1, DX, FX) | none | 4032x4032 / 3984x2656 / 6048x4032 | none | none |
 - Checked on raw.pixls.us samples by drawing the point on the preview:
   off-center landscapes (the Z fc flower, the Z 6 eye at y 1160 of 4024, the
   Z 7II, the Z 9) and a portrait frame (Z 30, Orientation 8: the point lands
   on the subject after rotation). Versions seen: `0300` Z 6, Z 50; `0301`
-  Z 5, Z 6II, Z 7II, Z fc, Z 30; `0400` Z 8, Z 9; `0401` Z f. All
-  little-endian.
+  Z 5, Z 6II, Z 7II, Z fc, Z 30; `0400` Z 8, Z 9; `0401` Z f, Z6III;
+  `0402` Z50II, Z5II. All little-endian.
 
 ## CR3
 
