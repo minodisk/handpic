@@ -168,3 +168,5 @@ dark and the off track (`switch`) is lightened. The PR body records this.
   component's fallbacks.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete; the manual check is still pending (see learnings.md)
