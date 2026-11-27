@@ -1682,12 +1682,22 @@ way (at the start as at the confirm, the `Pending` kept for the same id),
 cannot be canceled while it runs, and reports `finished` with the split's
 status line or the new path.
 
-`wait_for_idle` after a confirmed import can return idle with the destination
-folder open but not yet showing the copies (`no RAW files in ...`): the
-watcher's re-list shows them about a second later, and a menu import has the
-same race (`import_ran` re-lists only on `resync.changed()`). A client that
-needs the copies reads `get_view` again, or calls `wait_for_idle` once more,
-before trusting the listing.
+The copies show in the open destination folder during the run, at the
+watcher's reports (at most `MAX_WAIT` apart while copies keep landing, deferred while a scan runs),
+not all at the run's end. `wait_for_idle` after a confirmed import can still
+return idle with the folder not yet showing the last copies: the watcher's
+report of them comes up to `DEBOUNCE` after the last rename, and a menu
+import has the same race (`import_ran` re-lists only on
+`resync.changed()`). A client that needs every copy reads `get_view` again,
+or calls `wait_for_idle` once more, before trusting the listing.
+The cadence a user sees is bound by the scan, not by `MAX_WAIT`: the
+re-listing a report asks for waits for pass 2 and pass 3 on the landed files
+(about 6 s in a debug build on 100 ARWs), and the last files showed about
+14 s after the run ended, so a slow strip fill during an import is the scan,
+not the watcher. An `import_folder` preview is `pending` only after its read
+ends: poll `get_status` for `pending` before the confirming call, or the
+confirm is refused with `a folder operation is under way`
+(`../plans/_archived/20261128-watch-max-wait/learnings.md`).
 
 `rename_folder` is the tree's inline `Rename…` with the name given: the
 engine checks the folder and the name with `rename::folder_target`
@@ -1908,7 +1918,14 @@ full-size eye measure says).
 
 `main.rs` holds one `watch::Watch` whose callback sends `Event::Changed` into
 the scan's channel; each listing calls `watch::set` before `read_listing`, so a
-change during the listing is not missed. `resync.rs` defers a change that
+change during the listing is not missed. The watcher reports a burst
+`DEBOUNCE` (500 ms) after its last event, or `MAX_WAIT` (2 s) after its first
+event while it goes on; the next event starts a new burst. A due report is
+emitted before the next event is taken, even when `recv_timeout` hands over
+an event past the deadline, so a queue that never runs dry cannot hold a
+report back; while events keep arriving the reports land exactly every
+`MAX_WAIT` (`watch::step` over the pending `Burst`, pure, which the tests
+drive with a synthetic clock). `resync.rs` defers a change that
 arrives while a listing or its scan runs to that scan's end, one pending at
 most, as the Tauri frontend's `resyncPending`: a re-listing mid-scan would
 cancel and restart it. A re-listing carries the current file by path, the
@@ -1916,9 +1933,13 @@ strip's offset (`carried_offset`) and the loaded thumbnails
 (`carried_indices`), bumps a listing counter that drops the previous listing's
 preview reads, and always reads the current preview again.
 
+- Rule: during an import into the open folder the import renames a file in
+  more often than `DEBOUNCE`, so the strip fills at the slower of `MAX_WAIT`
+  and the listing plus scan of the files landed since the last re-listing; a
+  report during the scan waits for its end, so pass 1 is never restarted.
 - Rule: a file still being copied in changes size between events, so each
-  debounced event re-extracts it (`todo=1 removed=1`) until the copy ends;
-  that is expected, not a loop.
+  report of the burst re-extracts it (`todo=1 removed=1`), at least every
+  `MAX_WAIT`, until the copy ends; that is expected, not a loop.
 
 ### The listing and the shown list are two lists, rebuilt by one `refilter` (Measured)
 
@@ -5957,7 +5978,16 @@ the backdrop's condition and the gate's `Held` variant.
   `Cancel` stopped a run with no `.handpic-tmp` file left; the strip of the
   open date folder stayed empty until that folder's copies ended (results
   in
-  `../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
+  `../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`;
+  fixed by the watcher's `MAX_WAIT`, next line).
+- Seen (2026-11-28, Windows 11, a debug build with `--features screenshot`,
+  through MCP): with the watcher's `MAX_WAIT`, a 100-file (5.2 GB) import
+  into the open date folder filled the strip during the run: 0 files listed
+  until 18 were copied, 19 at 25 copied, 70 at 76 copied, and the last 30
+  when the scan under way at the run's end finished, 14 s after it; the log
+  showed a `resync:` line about every 2 s during the 12.6 s run, those
+  during a scan `deferred` (results in
+  `../plans/_archived/20261128-watch-max-wait/results.md`).
 - Seen (2026-11-23, Windows 11, through MCP): a `rewrite_sidecars` and a
   `delete_sidecars` during pass 1 of a fresh index noted `waiting for the
   scan to finish`, and the dialog opened once pass 2 ended (results in

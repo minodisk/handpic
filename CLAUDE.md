@@ -157,8 +157,8 @@ that came back on Windows, keeping what came back for
 folder's files have an export in its `Output` or `Output-sequenced` subfolder,
 by file stem, with PhotoLab's copy and DeepPRIME suffixes (no answer without
 such a folder, an error when one cannot be read whole), `src/watch.rs` the open
-folder's watcher, which reports a settled burst through a callback and names no
-event, `src/perf.rs` the performance overlay's CPU and disk sampler (`Sampler`,
+folder's watcher, which reports a settled burst, or one that goes on every
+`MAX_WAIT`, through a callback and names no event, `src/perf.rs` the performance overlay's CPU and disk sampler (`Sampler`,
 whose `start` runs one thread that hands a `Sample` every 500 ms to a callback:
 Handpic's process CPU and the system's, each 0–100 %, Handpic's read
 throughput in bytes per second and the system's disk busy time, 0–100 %, PDH
