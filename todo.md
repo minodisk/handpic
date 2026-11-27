@@ -44,7 +44,6 @@ Seen on 2026-11-28 (Windows 11) while checking the right-click menus' keys (`doc
 #### TODO
 
 - [ ] Pass each path through `context::shown_path` before the strip's `Copy Path` joins them, with a test, so the clipboard holds `D:\...` as the tree's does.
->>>>>>> d968115f (docs: record the plan and wrap-up for context-menu-keys)
 
 ### App: confirm the split-deferred-open test fails without its fix
 
