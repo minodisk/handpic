@@ -20,7 +20,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 ## Purpose
 
 The release-key-environment work
-([plan](../_archived/20261126-release-key-environment/plan.md)) moved the
+([plan](../20261126-release-key-environment/plan.md)) moved the
 production updater key `UPDATE_SIGNING_KEY` into the `release` GitHub
 environment and left one check open, verification (b): that a real release
 from `main` signs with the environment's secret once the repository-level
