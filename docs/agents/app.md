@@ -3554,8 +3554,7 @@ range can go to `ScanFocus` as it is. Its thumbnails come from
 `thumbs.rs`, four reads at a time through the index's read-only connection,
 and every image a cell drops goes through `retired`, like the preview's.
 
-- Rule (seen at the default strip height only; other heights not yet seen on
-  screen): a cell's name wider than the cell is shortened with `…` in the
+- Rule: a cell's name wider than the cell is shortened with `…` in the
   middle (`main.rs`'s `fitted_name`, GPUI's `LineWrapper::truncate_line` with
   `TruncateFrom::Middle`: about two thirds of the width for the start, one
   third for the tail with the frame number and the extension), against the
@@ -3571,6 +3570,12 @@ and every image a cell drops goes through `retired`, like the preview's.
   `L1001880-DxO_D…ME 3.jpg` fitted inside their cells and short names stayed
   centered and unchanged
   (`docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
+  Seen on Windows 11 on 2026-11-27 at `stripheight::MIN` and `MAX` (heights
+  set through the store, not a drag): at `MIN` every long name was shortened
+  in the middle and stayed inside its cell with a gap to the next, at `MAX`
+  the longest name fitted whole, short names stayed centered and unchanged,
+  and no glyph was clipped at either edge, so `NAME_INSET` is left as is
+  (`docs/plans/_archived/20261127-windows-device-checks-c7/results.md`).
 
 ### A `canvas` gets no input; its wrapping `div` does (Inferred)
 
@@ -4576,9 +4581,17 @@ decision, 2026-11-23), opened `Windowed` with no `display_id`.
   (1600x1000 client), vertically centered and 93 px right of the display's
   center with the taskbar docked left: 31 px (the visible area's center) plus
   62 px (the taskbar), the workspace-coordinate offset `default_bounds` now
-  takes off. The fixed default is not measured on the host yet.
-- Not seen yet: a second monitor (with a different scale factor), and the
-  taskbar docked at the top (the
+  takes off.
+- Measured (2026-11-27, Windows 11, the same display, the taskbar docked
+  left, a fresh `--settings` store with no `windowBounds`): the fixed default
+  opened at 1616x1008 outer (1600x1000 client), the DWM frame's center at x
+  2591, y 716.5 against the visible area's 2591, 720: centered to the pixel
+  horizontally and within the frame's 3.5 px vertically, 31 px right of the
+  display's center, no longer 93 px
+  (`docs/plans/_archived/20261127-windows-device-checks-c7/results.md`).
+- Not seen yet: a second monitor (with a different scale factor), the
+  default window with the taskbar at the bottom, and the taskbar docked at
+  the top (the
   restore bounds are in workspace coordinates there, the clamp compares them
   with the display's screen coordinates): the pending check in
   `../plans/20261114-gpui-session-restore/learnings.md`. macOS and Linux are
@@ -6283,26 +6296,30 @@ re-reading the newest file, and the overlay has few pages to compete with. See
 
 ### A prefetch hit leaves only the frame (Measured)
 
-These numbers are from before `neighbours` wrapped at the ends of the list
-(`../plans/20261123-todo-ten-closeouts/plan.md`, Step 4); the run was not
-repeated after it, so the wraps' 3 misses below should now be hits.
-
-Release, `--auto 60` on the 20-file compare folders, warm index. Three runs
-with the prefetch ring alternated with three under `--no-prefetch` in one
-session (a busy machine, ARW noisy). Median p50 / p95 `keypressToPixels`:
-ARW 12.82 / 20.10 ms against 23.40 / 34.05 ms, RAF 14.13 / 56.27 ms
-against 66.15 / 78.95 ms. Every prefetch run hit 57 of 60 presses. The 3
-misses are the wraps (no neighbour across the pager's wrap), and they set the
-p95. `paint` did not move on a hit, and `present`'s p50 rose about 0.1 ms.
-Starting the prefetch when the current result is shown therefore does not
-slow the current page, so it stays there. Memory peaks on RAF: about
+Release at `f5cab4bf`, `--auto 60` on the 20-file compare folders, warm
+index, 2026-11-27. Three runs with the prefetch ring alternated with three
+under `--no-prefetch` in one session (a busy machine). Median p50 / p95
+`keypressToPixels`: ARW 13.64 / 22.22 ms against 28.01 / 36.30 ms, RAF
+13.34 / 22.04 ms against 55.39 / 71.95 ms. Every prefetch run hit 60 of 60
+presses but one RAF run, 58 of 59 (one press coalesced), whose miss was a
+mid-list read on the busy machine, not a wrap: the presses across the first /
+last file now come from the ring
+(`docs/plans/_archived/20261127-windows-device-checks-c7/results.md`).
+Before `neighbours` wrapped at the ends of the list
+(`../plans/_archived/20261123-todo-ten-closeouts/plan.md`, Step 4), every
+prefetch run hit 57 of 60, the 3 misses being the wraps, which set the p95
+(ARW 12.82 / 20.10 ms against 23.40 / 34.05 ms, RAF 14.13 / 56.27 ms against
+66.15 / 78.95 ms). In that earlier run `paint` did not move on a hit, and
+`present`'s p50 rose about 0.1 ms. Starting the prefetch when the current
+result is shown therefore does not slow the current page, so it stays there.
+Memory peaks on RAF in the earlier run: about
 +110 MB working set and +300 MB private bytes. The cap counts 128 MB of BGRA
 (two RAF neighbours are 104 MB). The rest is the prefetch's decode buffers
 and the GPU textures that kept entries still hold. See
 [the plan's learnings](../plans/_archived/20261114-gpui-prefetch/learnings.md).
 
-- Rule: count hits from the `page` line's `source=prefetch`. In the runs
-  above, from before the wrap, a prefetch run's p95 was the wraps' reads;
-  read the hits' latency from the p50.
+- Rule: count hits from the `page` line's `source=prefetch`. Since the wrap
+  the presses across the first / last file hit too; a miss is a read on a
+  busy machine and sets the p95, so read the hits' latency from the p50.
 - Rule: prefetch does not run while a scan pass runs. An A/B of the ring
   needs a warm index whose scan ends before the first press.
