@@ -142,3 +142,4 @@ The run is already done; nothing is run again.
 ## Progress
 
 - 2026-11-27: Step 1 done (results.md, learnings.md, todo.md, docs/agents/app.md bullets)
+- (2026-11-27) Step 1 complete

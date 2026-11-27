@@ -1,6 +1,16 @@
 # todo
 
 ## Cross-cutting / other
+### App: the keymap capture refusal is drawn in the settings body, but app.md says the status line
+
+#### Background
+
+`docs/agents/app.md`'s keymap section ("The keymap is edited in the modal and replaced whole") says a refused capture key shows its refusal on the status line. On Windows 11 on 2026-11-27 (results in `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`, item 14), `+` then `home` and `+` then `end` showed `"home" is taken by this app` (and the same for `end`) in red in the settings body; the full-window settings layer covers the status line, and the keymap was unchanged. It may be the settings' own line rather than the status line. Plan: `docs/plans/_archived/20261127-windows-device-checks-c5/plan.md`. Files: `docs/agents/app.md`, `crates/app/src/settingsview.rs`.
+
+#### TODO
+
+- [ ] Check in `crates/app/src/settingsview.rs` which line draws a refused capture key's refusal, and correct the rule in `docs/agents/app.md`'s keymap section to match.
+
 ### App: confirm the split-deferred-open test fails without its fix
 
 #### Background
