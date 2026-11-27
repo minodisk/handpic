@@ -111,3 +111,4 @@ The plan was approved through the delegation brief of the todo sweep
   ignores alpha.
 
 ## Progress
+- (2026-11-27) Step 1 complete
