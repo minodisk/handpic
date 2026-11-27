@@ -640,6 +640,62 @@ fn the_no_folder_message_wraps_inside_a_narrow_preview_and_still_opens_the_picke
 }
 
 #[test]
+fn the_title_bar_lies_above_the_trash_dialog_and_keeps_its_focus() {
+    let mut ui = Ui::open();
+    ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);
+    ui.update(|view, cx| {
+        let paths = [view.files[0].to_string_lossy().into_owned()];
+        view.confirm_trash(&paths, crate::trash::Mode::Trash, cx);
+        assert!(view.trash.busy());
+    });
+    ui.cx.run_until_parked();
+    let run = ui.read(|view| view.trash_buttons[0].clone());
+    let focused = |ui: &mut Ui| ui.cx.update(|window, _| run.is_focused(window));
+    assert!(focused(&mut ui), "the dialog's run button has no focus");
+    let (viewport, pad) = ui.cx.update(|window, _| {
+        (
+            window.viewport_size(),
+            gpui_kit::component::window_paddings(window),
+        )
+    });
+    ui.cx.simulate_click(
+        gpui_kit::point(viewport.width / 2., pad.top + px(10.)),
+        gpui_kit::Modifiers::default(),
+    );
+    ui.read(|view| {
+        assert_eq!(view.bar_presses, 1, "the press did not reach the bar");
+        assert!(view.trash.busy());
+    });
+    assert!(focused(&mut ui), "a press on the bar moved the focus");
+    ui.cx.simulate_click(
+        gpui_kit::point(pad.left + px(5.), viewport.height - pad.bottom - px(5.)),
+        gpui_kit::Modifiers::default(),
+    );
+    ui.read(|view| {
+        assert_eq!(view.bar_presses, 1);
+        assert!(view.trash.busy());
+    });
+    assert!(focused(&mut ui), "a press on the backdrop moved the focus");
+}
+
+#[test]
+fn the_settings_do_not_open_under_the_cache_confirmation() {
+    let mut ui = Ui::open();
+    ui.open_folder(&[("a.dng", 1)]);
+    ui.update(|view, cx| {
+        view.press_clear(cx);
+        assert!(view.clear.asking());
+    });
+    ui.cx.run_until_parked();
+    let view = ui.view.clone().unwrap();
+    view.update_in(&mut ui.cx, |view, window, cx| {
+        view.open_settings(window, cx)
+    });
+    let settings = ui.read(|view| view.settings_view.clone());
+    assert!(!settings.read_with(&ui.cx, |settings, _| settings.is_open()));
+}
+
+#[test]
 fn the_settings_key_opens_the_settings_from_the_tree_but_not_from_a_rename() {
     let mut ui = Ui::open();
     let folder = ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);

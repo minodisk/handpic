@@ -548,6 +548,9 @@ struct Handpic {
     clear: cache::ClearFlow,
     cache_modal: modal::Modal,
     cache_buttons: [FocusHandle; 2],
+    /// The left presses the title bar's wrapper received, for the UI tests.
+    #[cfg(test)]
+    bar_presses: usize,
     /// Bumped by every read of the index's size: an older answer is dropped.
     size_reads: u64,
     /// The main window, which an import's end checks and notifies from.
@@ -1040,6 +1043,8 @@ impl Handpic {
             folder_modal: modal::Modal::new(window.window_handle()),
             folder_buttons: [cx.focus_handle(), cx.focus_handle()],
             clear: cache::ClearFlow::default(),
+            #[cfg(test)]
+            bar_presses: 0,
             cache_modal: modal::Modal::new(window.window_handle()),
             cache_buttons: [cx.focus_handle(), cx.focus_handle()],
             size_reads: 0,
@@ -3237,15 +3242,17 @@ impl Handpic {
     }
 
     /// Open the settings modal, from `OPEN_KEY` or the title bar's button.
-    /// Not while the settings, a trash or folder-operation dialog is open,
-    /// nor while a folder flow is under way, as in the Tauri app: the dialog
-    /// would open over the settings and the run would read a format changed
-    /// meanwhile.
+    /// Not while the settings, a trash, folder-operation or cache dialog is
+    /// open, nor while a folder flow is under way, as in the Tauri app: the
+    /// dialog would open over the settings and the run would read a format
+    /// changed meanwhile. The title bar's gear stays pressable under a
+    /// dialog, so this is what keeps it from opening them there.
     fn open_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.settings_view.read(cx).is_open()
             || self.trash.busy()
             || self.folderops.dialog_open()
             || self.folderops.busy()
+            || self.clear.asking()
         {
             return;
         }
@@ -6424,6 +6431,13 @@ impl Render for Handpic {
         let menu_max = (menu_max_height(window)
             - px(stripheight::HEADER + strip_geometry.height + stripheight::GUTTER))
         .max(px(0.));
+        let bar = div().relative().flex_shrink_0();
+        // The UI tests' probe of which presses reach the bar.
+        #[cfg(test)]
+        let bar = bar.on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _: &MouseDownEvent, _, _| this.bar_presses += 1),
+        );
         let main = div()
             .size_full()
             .flex()
@@ -6467,36 +6481,36 @@ impl Render for Handpic {
             }))
             // The folder's name is an overlay so it centers on the whole bar;
             // listener-free, it inserts no hitbox and leaves the press to the
-            // bar's drag row and controls beneath.
-            .child(
-                div()
-                    .relative()
-                    .flex_shrink_0()
-                    .child(
-                        TitleBar::new()
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .text_size(px(13.))
-                                    .text_color(cx.theme().foreground)
-                                    .child(img(icons::APP).size(px(18.)))
-                                    .child("Handpic"),
-                            )
-                            .child(self.settings_button(cx)),
-                    )
-                    .children(self.dir.as_deref().map(|dir| {
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .px(px(TITLE_NAME_MARGIN))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(13.))
-                            .text_color(cx.theme().foreground)
-                            .child(div().min_w_0().truncate().child(context::folder_title(dir)))
-                    })),
-            )
+            // bar's drag row and controls beneath. The bar is deferred, under
+            // the dialogs' priority 10, so its hitboxes lie above the
+            // occluding `dialog` `div` of gpui-component's `Dialog` and its
+            // controls and drag still work under a dialog.
+            .child(deferred(
+                bar.child(
+                    TitleBar::new()
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .text_size(px(13.))
+                                .text_color(cx.theme().foreground)
+                                .child(img(icons::APP).size(px(18.)))
+                                .child("Handpic"),
+                        )
+                        .child(self.settings_button(cx)),
+                )
+                .children(self.dir.as_deref().map(|dir| {
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .px(px(TITLE_NAME_MARGIN))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(px(13.))
+                        .text_color(cx.theme().foreground)
+                        .child(div().min_w_0().truncate().child(context::folder_title(dir)))
+                })),
+            ))
             // The middle row and the strip, whose bounds give the strip's
             // bottom edge and the height the two share to a strip drag.
             .child(

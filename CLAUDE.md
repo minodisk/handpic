@@ -228,7 +228,8 @@ open folder's name at the same size centered across the whole bar by a
 listener-free overlay and truncated before the sides, and at its right end
 a gear `Button`, the thin `settings` derivative in a square-cornered box the
 bar's height wide and high like a window control's, whose click opens the settings as `ctrl+,` does, its press
-kept from the bar's window drag) in place of the OS title bar, and
+kept from the bar's window drag; the bar a `deferred` draw above the dialog layer, so its
+window controls and drag work under a dialog) in place of the OS title bar, and
 `packaging/` holds the macOS `Info.plist` and the Linux
 `dev.minodisk.handpic.desktop` the `app:bundle:macos` (`Handpic.app` under
 `target/<profile>/`, its `Info.plist` given the version and
@@ -632,6 +633,7 @@ the window opens as a gpui-component `Dialog` in `Root`'s layer through
 `src/modal.rs` (`Modal`, the open and close that follow a flow after the
 current update, the shell with the component's own closing, backdrop and
 animations off, and `backdrop`, the dimmed window the view draws under it
+below the title bar, leaving the bar out,
 that keeps a press from moving the focus) and runs through the engine's `trash::trash_listed` /
 `trash::delete_listed` on a background task, undoing a run with
 `trash::undo_run` and redoing it with `trash::redo_run`, `src/idle.rs` the gate holding

@@ -7,10 +7,12 @@
 //! button, `on_ok` / `on_cancel`), so only the flow closes it, and its
 //! entrance and exit animations. Its own backdrop is off too: on Windows the
 //! component's backdrop is a window drag area, so a press on it would move
-//! the window. The view draws `backdrop` in its place.
+//! the window. The view draws `backdrop` in its place, below the title bar,
+//! which the view draws above the dialog's occluding layer so the window
+//! controls and the bar's drag still work under a dialog.
 
 use gpui_kit::component::{
-    ActiveTheme, WindowExt,
+    ActiveTheme, TITLE_BAR_HEIGHT, WindowExt,
     dialog::{Dialog, DialogEntrance},
 };
 use gpui_kit::{
@@ -98,16 +100,20 @@ fn shell(dialog: Dialog, cx: &App) -> Dialog {
 }
 
 /// The dimmed window under an open dialog, drawn by the view while its flow
-/// asks or runs. The dialog's layer occludes the window, so nothing under it
-/// is pressed; this also keeps a press anywhere from moving the focus, which
-/// the dialog's host would otherwise take from its focused button.
+/// asks or runs, from below the title bar down: the bar, drawn above the
+/// dialog's layer, stays undimmed and pressable. The dialog's layer occludes
+/// the rest of the window, so nothing there is pressed; this also keeps a
+/// press anywhere, the bar included (the listener is window-wide), from
+/// moving the focus, which the dialog's host would otherwise take from its
+/// focused button.
 pub fn backdrop(cx: &App) -> AnyElement {
     deferred(
         div()
             .absolute()
-            .top_0()
+            .top(TITLE_BAR_HEIGHT)
             .left_0()
-            .size_full()
+            .right_0()
+            .bottom_0()
             .bg(cx.theme().overlay)
             .child(
                 canvas(
