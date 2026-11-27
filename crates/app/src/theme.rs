@@ -99,6 +99,8 @@ struct Palette {
     overlay: u32,
     /// `.button.outline`'s fill.
     button: u32,
+    /// The off `Switch`'s track.
+    switch: u32,
 }
 
 /// `style.css`'s Neutral dark tokens.
@@ -119,6 +121,7 @@ const DARK: Palette = Palette {
     ring: 0x737373ff,
     overlay: 0x00000099,
     button: 0xffffff0b,
+    switch: 0x737373ff,
 };
 
 /// shadcn/ui's Neutral light tokens (`apps/v4/public/r/colors/neutral.json`,
@@ -141,6 +144,7 @@ const LIGHT: Palette = Palette {
     ring: 0xa1a1a1ff,
     overlay: 0x00000099,
     button: 0xffffffff,
+    switch: 0xd4d4d4ff,
 };
 
 /// The window's rem, which `Root` sets from it every frame: GPUI's default,
@@ -444,6 +448,10 @@ fn map(colors: &mut ThemeColor, p: &Palette) {
     colors.button_danger_hover = rgba(p.danger_hover).into();
     colors.button_danger_active = rgba(p.danger_hover).into();
     colors.button_danger_foreground = rgba(p.danger_foreground).into();
+    // `Switch` paints its thumb with one token in both states over the
+    // `primary` on track, so the off track carries the legibility.
+    colors.switch = rgba(p.switch).into();
+    colors.switch_thumb = rgba(p.background).into();
 }
 
 #[cfg(test)]
@@ -540,6 +548,8 @@ mod tests {
         assert_eq!(colors.button_danger_hover, hex(0xe85c5fff));
         assert_eq!(colors.button_danger_active, hex(0xe85c5fff));
         assert_eq!(colors.button_danger_foreground, hex(0xfafafaff));
+        assert_eq!(colors.switch, hex(0x737373ff));
+        assert_eq!(colors.switch_thumb, hex(0x0a0a0aff));
     }
 
     #[test]
@@ -683,6 +693,8 @@ mod tests {
         assert_eq!(colors.button_danger_hover, hex(0xe91a23ff));
         assert_eq!(colors.button_danger_active, hex(0xe91a23ff));
         assert_eq!(colors.button_danger_foreground, hex(0xfafafaff));
+        assert_eq!(colors.switch, hex(0xd4d4d4ff));
+        assert_eq!(colors.switch_thumb, hex(0xffffffff));
     }
 
     #[test]
