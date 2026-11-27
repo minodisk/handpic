@@ -78,3 +78,5 @@ items is out of scope.
 - **Risk: a wrong PASS removes a check for good.** The check is no longer in `todo.md`, and the only review is after the fact through `results.md` and the PR body. That is why the body must list every check run with its outcome.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete

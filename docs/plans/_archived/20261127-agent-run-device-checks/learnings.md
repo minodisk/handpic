@@ -33,3 +33,7 @@
   follow-up. Basis: this plan's "Trade-offs and risks" (`planner.md` is not
   changed). Files: `.claude/agents/planner.md`,
   `.claude/agents/implementer.md`.
+  Completion criteria: `planner.md` asks a plan to name, for each hands-on
+  Done-when line, the input kind (agent-runnable or user-only) and the
+  material, consistent with the wrap-up's reason list in
+  `.claude/skills/develop/SKILL.md` 3.3 and `implementer.md` step 6.
