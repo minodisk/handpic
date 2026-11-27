@@ -30,7 +30,7 @@ were fine.
 
 `crates/app/src/theme.rs`'s Neutral mapping leaves `switch` / `switch_thumb`
 at gpui-component's `Default Dark` / `Default Light` values;
-[the native-component-controls plan](../_archived/20261116-native-component-controls/plan.md)
+[the native-component-controls plan](../20261116-native-component-controls/plan.md)
 decided to map them if the off state reads poorly. This plan maps them so
 the off state reads clearly, and closes the `todo.md` item that asked for
 the look.
