@@ -43,7 +43,7 @@ flowchart LR
     DEV["develop skill"] -.->|expands into| MAIN["main agent"]
 
     PLAN["0.1<br/>planner<br/>fable"]
-    APPROVE["0.2<br/>user approval"]
+    APPROVE["0.2<br/>present the plan"]
 
     BRANCH1["1.1<br/>check-parallel-work.sh<br/>+ ensure-new-branch.sh"]
     WRITE["1.2<br/>ensure-plan-dir.sh + Write"]
@@ -181,7 +181,7 @@ one-to-one onto the nodes in the diagram above.
 | --- | --- | --- |
 | **0** | **Planning** (no git operations; interrupting has zero side effects) | |
 | 0.1 | Make the plan | `planner` (agent) |
-| 0.2 | User approval | — (main + the user; go back to 0.1 if they want changes) |
+| 0.2 | Present the plan | — (main; proceeds unless a choice has no clear recommendation, back to 0.1 if the user answers with changes) |
 | **1** | **Persisting the plan** (once) | |
 | 1.1 | Branch prep | `check-parallel-work.sh` + `ensure-new-branch.sh` |
 | 1.2 | Persist the plan | `ensure-plan-dir.sh` + `Write` (no commit) |
@@ -255,7 +255,7 @@ Past plans and learnings under `docs/plans/` are written with the old numbers
 **Phases 1–3 have exactly the same shape:**
 
 ```
-Phase 0  plan → approval                                        ← no git operations
+Phase 0  plan → present                                         ← no git operations
 Phase 1  branch → persist                        → PR → merge
 Phase 2  branch → implement → review             → PR → merge     ★N times
 Phase 3  branch → learnings/settings/archive     → PR → merge
@@ -273,8 +273,8 @@ responsibility boundaries. At the head, each one makes its own branch.
 The merge at the tail belongs to the `merger` agent. A PR touching paths a
 revert cannot undo when they break (`.claude/**`, `.github/**`, toolchain and
 supply-chain configuration, and so on) comes back to the main agent as
-`NEEDS_APPROVAL`, and that is the single point of dialogue across Phases 1–3 /
-Phase S. `.md` is on the safe side regardless of directory, except under
+`NEEDS_APPROVAL`, and that is a stop across Phases 1–3 / Phase S (every other
+question goes through SKILL.md's § Deciding without asking). `.md` is on the safe side regardless of directory, except under
 `.claude` / `.agents` / `.codex`, so a docs-only PR never lands here. `merger`
 also syncs main and cleans up the branch, which duplicates the sync built into
 `ensure-new-branch.sh` at the head of the next loop — but both are idempotent
@@ -294,8 +294,8 @@ Phase 2, and:
 - Phase 1's branch stops being a special case
 
 The cost is one more PR and one more merge. The PR only contains plan.md, so CI
-is light. The 0.2 user approval and the PR review overlap somewhat, but it does
-give automated and human reviewers a chance to look at the plan.
+is light. The plan shown in 0.2 and the PR review overlap somewhat, but the PR
+does give automated and human reviewers a chance to look at the plan.
 
 ### Folding into one PR with single-PR mode (Phase S)
 
@@ -761,11 +761,31 @@ because Phase 0 shows it to the user. The old scheme handed it back to
 `plan-persister`, so writing it directly removes one round trip.
 
 The structure where a main agent operation sits between "make the plan" and
-"write it" does not change. User approval (subagents cannot have
-`AskUserQuestion`) and branch creation (write the plan first and it gets swept
+"write it" does not change. Presenting the plan and any question it leaves
+(subagents cannot have `AskUserQuestion`) and branch creation (write the plan first and it gets swept
 into `git stash --include-untracked`, a known incident route) stay where they
 are. But that is **a reason for main to do the writing, not a reason to split
 off an agent**.
+
+### Decide by recommendation, report at the end
+
+The main agent used to stop and ask at the 0.2 approval, at every `discuss`
+entry, at the parallel-work check's exit 1 and at every failure state. When
+one option was recommended, the user picked it nearly every time, so the
+question only cost a wait. SKILL.md's § Deciding without asking has the main
+agent take a clearly recommended option instead and record it; it still asks
+when no option is clearly recommended, when the options are close, when the
+action is destructive or irreversible beyond routine (deleting a branch that
+may be another session's), and when the same recovery fails a second time at
+the same point. The release PR, the release-shaping approvals, the `planner`
+model pin, the `[]` deadlock and the corroboration mismatch stay hard stops:
+they are gates or need a human action, not choices with a recommendation.
+
+The decisions stay visible: each is named in its phase's progress report, and
+§ Finishing the run lists them all after the final merge. With nothing left
+pending, the run then ends the Claude Code session (under herdr, a background
+`/exit` sent to its own pane once the turn is idle), so a finished run does not
+hold a pane open.
 
 ## When the user runs `/pr` / `/merge` directly
 
