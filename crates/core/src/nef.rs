@@ -7,12 +7,13 @@
 //! one, which is the preview. IFD0's own JPEG is a 160x120 thumbnail and the
 //! MakerNote's `PreviewIFD` JPEG is at most 640 wide, so neither is used.
 //!
-//! The AF point comes from the MakerNote's `AFInfo2` on the Z bodies.
+//! The AF point comes from the MakerNote's `AFInfo2` on the Z bodies, moved
+//! into a crop mode's frame by the MakerNote's `CropHiSpeed` and `CropArea`.
 
 use anyhow::{anyhow, Result};
 
 use crate::arw::{Arw, Codec, Embedded, FocusFrame, FocusLocation, Shot};
-use crate::exif::{self, integer};
+use crate::exif::{self, integer, TYPE_SHORT};
 use crate::sequence::{Entry, Tiff};
 
 const TAG_SUB_IFDS: u16 = 0x014a;
@@ -29,6 +30,12 @@ const TAG_AF_INFO2: u16 = 0x00b7;
 /// `AFInfo2`'s `AFCoordinatesAvailable` byte: 1 when the AF area position is
 /// filled in.
 const AF_COORDINATES_AVAILABLE: usize = 7;
+/// `CropHiSpeed`, `int16u[7]`: mode, original width and height, cropped
+/// width and height, then the crop's origin.
+const TAG_CROP_HI_SPEED: u16 = 0x001b;
+/// `CropArea`, `int16u[4]`: left, top, width and height of the crop the
+/// embedded JPEGs hold.
+const TAG_CROP_AREA: u16 = 0x0045;
 
 /// Parse a NEF (or a prefix of one). A structure that points past `buf` is an
 /// error, so a prefix too short to hold IFD0, the Exif IFD (when IFD0 points
@@ -95,6 +102,11 @@ fn sub_ifds(tiff: &Tiff, ifd0: &[Entry]) -> Result<Vec<usize>> {
 /// which is the unrotated image with the origin at the top left. `None` when
 /// the body wrote no position (auto-area before a focus lock, or an older
 /// version, whose position is only a grid point name).
+///
+/// A crop mode (DX on an FX body, 1:1, 16:9) keeps the `AFImage` frame at the
+/// uncropped size while the JPEGs hold the sensor's center, unscaled, so the
+/// point is moved into the crop by the centered offset and the frame becomes
+/// the crop's size; a point outside the crop is no AF point.
 fn af_point(
     buf: &[u8],
     tiff: &Tiff,
@@ -162,6 +174,16 @@ fn af_point(
         return Ok(None);
     }
     let (width, height) = (v(4), v(5));
+    let (mut sensor_w, mut sensor_h, mut x, mut y) = (sensor_w, sensor_h, x, y);
+    if let Some((crop_w, crop_h)) = crop(&note, &entries).filter(|&(w, h)| {
+        w > 0 && h > 0 && w <= sensor_w && h <= sensor_h && (w < sensor_w || h < sensor_h)
+    }) {
+        let (dx, dy) = ((sensor_w - crop_w) / 2, (sensor_h - crop_h) / 2);
+        if x < dx || y < dy || x - dx >= crop_w || y - dy >= crop_h {
+            return Ok(None);
+        }
+        (sensor_w, sensor_h, x, y) = (crop_w, crop_h, x - dx, y - dy);
+    }
     Ok(Some((
         FocusLocation {
             sensor_w,
@@ -174,6 +196,31 @@ fn af_point(
             .filter(|&(w, h)| w > 0 && h > 0)
             .map(|(width, height)| FocusFrame { width, height }),
     )))
+}
+
+/// The crop's width and height, when `CropHiSpeed` declares one (the cropped
+/// size no larger than the original on either side and smaller on one) and
+/// `CropArea` is readable. An uncropped body can still hold a JpgFromRaw
+/// smaller than the `AFImage` frame, which this leaves alone.
+fn crop(note: &Tiff, entries: &[Entry]) -> Option<(u16, u16)> {
+    let hi = shorts(note, entries, TAG_CROP_HI_SPEED, 7)?;
+    let (ow, oh, cw, ch) = (hi[1], hi[2], hi[3], hi[4]);
+    if cw > ow || ch > oh || (cw == ow && ch == oh) {
+        return None;
+    }
+    let area = shorts(note, entries, TAG_CROP_AREA, 4)?;
+    Some((area[2], area[3]))
+}
+
+/// The `n` SHORT values of `tag`, which sit at the offset the entry carries
+/// (`n` above 2).
+fn shorts(note: &Tiff, entries: &[Entry], tag: u16, n: usize) -> Option<Vec<u16>> {
+    let e = entries.iter().find(|e| e.tag == tag)?;
+    if e.typ != TYPE_SHORT || e.count as usize != n {
+        return None;
+    }
+    let at = note.u32(e.value_field).ok()? as usize;
+    (0..n).map(|i| note.u16(at + 2 * i).ok()).collect()
 }
 
 fn jpeg(tiff: &Tiff, entries: &[Entry]) -> Option<Embedded> {
@@ -217,6 +264,22 @@ pub(crate) mod tests {
             v[base + 2 * i..base + 2 * i + 2].copy_from_slice(&w.u16(*x));
         }
         (TAG_AF_INFO2, TYPE_UNDEFINED, v.len() as u32, v)
+    }
+
+    fn shorts_field(w: &W, tag: u16, values: &[u16]) -> Field {
+        let v = values.iter().flat_map(|x| w.u16(*x)).collect();
+        (tag, TYPE_SHORT, values.len() as u32, v)
+    }
+
+    /// A `CropHiSpeed` from the original size to the cropped one.
+    fn crop_hi_speed(w: &W, original: (u16, u16), cropped: (u16, u16)) -> Field {
+        let values = [1, original.0, original.1, cropped.0, cropped.1, 0, 0];
+        shorts_field(w, TAG_CROP_HI_SPEED, &values)
+    }
+
+    /// A `CropArea` of `width` x `height`.
+    fn crop_area(w: &W, width: u16, height: u16) -> Field {
+        shorts_field(w, TAG_CROP_AREA, &[8, 8, width, height])
     }
 
     /// A Nikon MakerNote: the header, then a TIFF in `w`'s byte order holding
@@ -461,6 +524,95 @@ pub(crate) mod tests {
         assert!(a.shot.focus.is_none() && a.shot.focus_frame.is_none());
         assert_eq!(at(a.full), Some((1000, 900)));
         assert_eq!(at(a.preview), Some((1000, 900)));
+    }
+
+    #[test]
+    fn a_crop_mode_moves_the_af_point_into_the_crop() {
+        for (file, note) in [(true, true), (true, false), (false, false)] {
+            let (file, note) = (W(file), W(note));
+            let s = af(
+                &file,
+                &note,
+                &[
+                    crop_hi_speed(&note, (6064, 4040), (3984, 2656)),
+                    crop_area(&note, 3984, 2656),
+                    af_info2(&note, b"0401", 1, [6048, 4032, 4000, 1000, 300, 200]),
+                ],
+            );
+            assert_eq!(
+                s.focus,
+                Some(FocusLocation {
+                    sensor_w: 3984,
+                    sensor_h: 2656,
+                    x: 2968,
+                    y: 312,
+                }),
+                "le {}/{}",
+                file.0,
+                note.0
+            );
+            assert_eq!(
+                s.focus_frame,
+                Some(FocusFrame {
+                    width: 300,
+                    height: 200,
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn a_point_outside_the_crop_gives_no_af_point() {
+        let w = W(false);
+        for (x, y) in [(1031, 2016), (3023, 687), (5016, 2016), (3023, 3344)] {
+            let s = af(
+                &w,
+                &w,
+                &[
+                    crop_hi_speed(&w, (6064, 4040), (3984, 2656)),
+                    crop_area(&w, 3984, 2656),
+                    af_info2(&w, b"0401", 1, [6048, 4032, x, y, 300, 200]),
+                ],
+            );
+            assert!(s.focus.is_none() && s.focus_frame.is_none(), "({x}, {y})");
+        }
+    }
+
+    #[test]
+    fn an_uncropped_or_unreadable_crop_leaves_the_frame() {
+        let w = W(true);
+        let values = [6048, 4024, 1512, 580, 300, 200];
+        let unchanged = Some(FocusLocation {
+            sensor_w: 6048,
+            sensor_h: 4024,
+            x: 1512,
+            y: 580,
+        });
+        let mut wrong_type = crop_area(&w, 3984, 2656);
+        wrong_type.1 = TYPE_LONG;
+        for crop in [
+            vec![crop_hi_speed(&w, (6064, 4040), (6064, 4040))],
+            vec![
+                crop_hi_speed(&w, (6064, 4040), (6064, 4040)),
+                crop_area(&w, 3024, 2016),
+            ],
+            vec![crop_hi_speed(&w, (6064, 4040), (3984, 2656))],
+            vec![crop_hi_speed(&w, (6064, 4040), (3984, 2656)), wrong_type],
+            vec![
+                crop_hi_speed(&w, (6064, 4040), (3984, 2656)),
+                shorts_field(&w, TAG_CROP_AREA, &[0, 0, 3984]),
+            ],
+            vec![
+                crop_hi_speed(&w, (6064, 4040), (3984, 2656)),
+                crop_area(&w, 0, 0),
+            ],
+        ] {
+            let mut fields = crop;
+            fields.push(af_info2(&w, b"0301", 1, values));
+            let s = af(&w, &w, &fields);
+            assert_eq!(s.focus, unchanged);
+            assert!(s.focus_frame.is_some());
+        }
     }
 
     fn values() -> [u16; 6] {

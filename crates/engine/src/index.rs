@@ -137,8 +137,11 @@ const SCHEMA_VERSION: i64 = 28;
 /// pass scored keeps a correct score. `12` reads big-endian (`MM`) TIFF
 /// containers, so the DNGs that failed with `not a little-endian TIFF/ARW`
 /// get re-extracted. `13` keeps the metadata of a file whose extraction
-/// failed in its error row, so existing error rows are re-extracted.
-const EXTRACTOR_VERSION: i64 = 13;
+/// failed in its error row, so existing error rows are re-extracted. `14`
+/// moves a crop-mode NEF's AF point into the cropped JPEG's frame (Nikon
+/// `CropHiSpeed` / `CropArea`); a re-extracted row resets
+/// `faces_extractor`, so pass 2 re-scores it too.
+const EXTRACTOR_VERSION: i64 = 14;
 
 /// The version of what the second pass, `handpic_core::scan::extract_analysis`,
 /// produces, stored on every `files` row as `faces_extractor` next to its

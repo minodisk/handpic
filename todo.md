@@ -226,24 +226,25 @@ Files: `.claude/agents/pr-runner.md`
 
 - [ ] On real `/pr` runs after the `agent-rules-from-transcript-audit` PR merges, read the `pr-runner` subagent transcripts (the subagent `.jsonl` files under the Claude Code project directory for that session). Confirm that no `.claude/skills/**/scripts` call carries a `cd` prefix and that no script call is sent twice in one message. If either recurs, strengthen the wording in `.claude/agents/pr-runner.md` §4.
 
-### Core: Nikon DX-crop and non-standard-crop AF point mapping is unverified
+### Core: Nikon crop-mode AF point offset is verified only on centered points
 
-`nef::parse`'s Nikon `AFInfo2` AF point is read as top-left coordinates in
-the `AFImageWidth` / `AFImageHeight` frame, assumed to already match the
-JPEG's crop. No DX-crop NEF sample was available to confirm this: exiftool's
-`Nikon.pm` hints that some DX-mode results are reported in FX (full-frame)
-coordinates, in which case the point would land off by the crop factor when
-`AFImageWidth` stays the FX size while the JPEG is the DX crop. Found in the
-Step 5 sample survey of
-`docs/plans/_archived/20260929-canon-nikon-raw/plan.md`. Files:
+Crop-mode NEFs (Z6III DX / 1:1 / 16:9, Z50II 1:1 / 16:9 on raw.pixls.us)
+showed that `AFInfo2`'s `AFImageWidth` / `AFImageHeight` stay at the
+uncropped size while the JPEGs hold the crop. `nef::af_point` now reads the
+crop from the MakerNote's `CropHiSpeed` / `CropArea` and moves the point by
+the centered offset into the crop's frame, the AF area unscaled, a point
+outside the crop giving none (`docs/plans/_archived/20261128-nikon-crop-af-point/plan.md`,
+`docs/agents/raw-metadata-parsing.md`). The metadata confirms the crop is
+the sensor's center, unscaled, but every sample's AF point was at the
+center, where offset and proportional scaling agree. Files:
 `crates/core/src/nef.rs`.
 
 #### TODO
 
-- [ ] Find a Nikon DX-crop NEF sample (or a full-frame Z body shot in DX
-      crop mode) and confirm whether the AF point position and
-      `AFImageWidth` / `AFImageHeight` are already in DX coordinates or
-      need scaling by the crop factor; fix `nef.rs` if the latter.
+- [ ] Find a crop-mode NEF (DX, 1:1 or 16:9) whose AF point is off-center
+      and confirm that the mapped point lands on the subject, i.e. that
+      `AFAreaXPosition` / `AFAreaYPosition` stay in the uncropped frame;
+      switch `nef.rs` to another mapping if not.
 
 ### Core: widen camera support from public sample RAW files
 

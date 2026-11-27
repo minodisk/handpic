@@ -88,6 +88,9 @@ and delist the bodies that fell below it, as a docs-only change.
 | Nikon Z fc | ✓ | ✓ | – | ✓ |
 | Nikon Z 50 | ✓ | ✓ | – | ✓ |
 | Nikon Z 30 | ✓ | ✓ | – | ✓ |
+| Nikon Z6III | ✓ | ✓ | – | ✓ |
+| Nikon Z50II | ✓ | ✓ | – | ✓ |
+| Nikon Z5II | – | – | – | ✓ |
 | Nikon D850 | – | – | – | ✓ |
 | Nikon D500 | – | – | – | ✓ |
 | Fujifilm X-H2S | ✓ | – | – | – |
@@ -146,8 +149,10 @@ and delist the bodies that fell below it, as a docs-only change.
 On the Canon and Nikon bodies, Handpic reads the AF point from the MakerNote
 (`AFInfo2`); with several AF points in focus, the mark covers them all. The
 Nikon Z 8 and Canon EOS R6 samples carried no AF position (an automatic area
-that never locked, and manual focus), so those two are unconfirmed; the Nikon
-D850 and D500 write an older `AFInfo2` that Handpic does not read.
+that never locked, and manual focus), and neither did the Nikon Z5II samples
+(all three in AF-A with no position), so those three are
+unconfirmed; the Nikon D850 and D500 write an older `AFInfo2` that Handpic
+does not read.
 
 CR3 files shot with HDR PQ on (HEIF) hold HEVC images instead of JPEGs.
 Handpic decodes their 1620x1080 HEVC preview and tone-maps it to sRGB, so
