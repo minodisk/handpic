@@ -2243,7 +2243,8 @@ dimmed, shows capture order and keeps the stored key.
 the rendered alpha mask in the element's `text_color`, so a stroked Lucide
 icon and a filled derivative both draw in one color. `icons.rs` holds a
 path constant per icon (`icons/<name>.svg`), the SVG strings of the app's
-own derivatives (the filled star, the frowning `scan-face`),
+own derivatives (the filled star, the frowning `scan-face`, the title bar's
+thin `settings` gear),
 `Catalog`, the catalog icons selected with `gpui_kit::assets::icon_assets!`
 (`rectangle-vertical`, `rectangle-horizontal`, `scan-face`), and `Icons`,
 whose `load` answers the own paths with borrowed bytes, then `Catalog`'s,
@@ -2256,7 +2257,7 @@ and the tree's `folder` and `folder-open`, a path in none of them with
   the `icon_assets!` list and a path constant, the literal its `IconName`
   variant's `path()` gives (`path()` is not `const`); an icon the default
   `Assets` already holds needs only the path constant. Only a derivative (a
-  filled shape, the `scan-face` frown) is copied in as an own SVG: copy its
+  filled shape, the `scan-face` frown, a thinner stroke) is copied in as an own SVG: copy its
   base from `lucide-static` at the version the header names (v1.48.0, as
   the Tauri frontend's `icons.ts` did), add its SVG and path constants and its
   entry in `SVGS`, and name it in the header comment, with any
@@ -4183,12 +4184,13 @@ The window draws no OS title bar. `main()` opens it with
 `impl Render for Handpic` puts `TitleBar::new()` first in the root's
 `flex_col`, a `flex_shrink_0` row of `TITLE_BAR_HEIGHT` (34 px) in flow on
 every platform, so the main area below it shrinks by itself. Its first child
-is an `h_flex().gap_2().text_sm()` of `img(icons::APP)` at 16 px and the
-text "Handpic" at 14 px in `cx.theme().foreground`; its second, which the bar's
+is an `h_flex().gap_2().text_size(px(13.))` of `img(icons::APP)` at 18 px and
+the text "Handpic" at 13 px in `cx.theme().foreground`; its second, which the bar's
 `justify_between` row puts at the right end (left of the window controls on
-Windows / Linux), is `settings_button`: a ghost, small, `tab_stop(false)`
-gpui-component `Button` with `IconName::Settings` in a `div` with a `mr_2`
-margin and the tooltip. The bar draws the window controls on
+Windows / Linux), is `settings_button`: a ghost, `tab_stop(false)`
+gpui-component `Button` with `Icon::default().path(icons::SETTINGS_THIN)` (Lucide
+`settings` at `stroke-width="1.5"`) in a full-height `div` (`h_full()`, no
+margin) holding the tooltip. The bar draws the window controls on
 Windows (hit-tested through `WindowControlArea`) and Linux and moves the
 window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/plan.md).
 
@@ -4198,7 +4200,7 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   inner row, which starts after the left padding and ends before the window
   controls. A `relative`, `flex_shrink_0` `div` wraps `TitleBar` (its
   height stays `TITLE_BAR_HEIGHT`) and, while a folder is open, holds after
-  it an `absolute().inset_0()` overlay at `text_sm` in the theme's
+  it an `absolute().inset_0()` overlay at `text_size(px(13.))` in the theme's
   `foreground`, padded `TITLE_NAME_MARGIN` (160 px) a side so the name,
   `min_w_0().truncate()`, ends in an ellipsis before the icon, "Handpic",
   the gear or the controls. The name is read in `render`, so another open,
@@ -4211,6 +4213,16 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   manual check is pending in the plan); the fallback is a third `TitleBar`
   child, centered only between the left group and the gear. Source:
   [the plan](../plans/_archived/20261118-native-title-bar-folder-name/plan.md).
+- Rule: the gear's `Button` is `.with_size(px(14. / 0.75))`,
+  `.w(TITLE_BAR_HEIGHT)`, `.h_full()` and `.rounded(ButtonRounded::None)`.
+  gpui-component draws a button's icon at 0.75 of the button's size, so
+  `px(14. / 0.75)` gives a 14 px icon; the box is then set to
+  `TITLE_BAR_HEIGHT` wide, the bar's full height, with square corners, after
+  the window controls' own box, so its hover fill sits flush with them. Seen
+  in a dev build on Windows 11, where the user approved it; the margin-less
+  square gear is unseen on macOS (traffic lights on the left, none beside it) and
+  Linux, a manual check pending. Source: the plan
+  `docs/plans/20261127-title-bar-tweak/plan.md`.
 - Rule: keep `title: Some("Handpic")`. `title_bar_options()` has `title:
   None`, which would empty the taskbar and Alt+Tab text.
 - A press on the bar still reaches the root `div`'s `track_focus`, so a click

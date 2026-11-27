@@ -99,7 +99,7 @@ use gpui_kit::application;
 use gpui_kit::component::{
     ActiveTheme, ColorName, Disableable, Icon, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
     TitleBar,
-    button::{Button, ButtonVariants},
+    button::{Button, ButtonRounded, ButtonVariants},
     dialog::{Dialog, DialogFooter},
     h_flex,
     kbd::Kbd,
@@ -5865,7 +5865,7 @@ impl Handpic {
         let (text, key) = settingsmodal::OPEN_TIP;
         div()
             .id("settings-tip")
-            .mr_2()
+            .h_full()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .tooltip(move |window, cx| {
                 Tooltip::new(text)
@@ -5875,9 +5875,15 @@ impl Handpic {
             .child(
                 Button::new("settings-open")
                     .ghost()
-                    .small()
+                    // The icon is drawn at 0.75 of the button's size, 14 px;
+                    // the box, styled after it, is a square-cornered window
+                    // control's: the bar's height wide, its full height.
+                    .with_size(px(14. / 0.75))
+                    .w(TITLE_BAR_HEIGHT)
+                    .h_full()
+                    .rounded(ButtonRounded::None)
                     .tab_stop(false)
-                    .icon(IconName::Settings)
+                    .icon(Icon::default().path(icons::SETTINGS_THIN))
                     .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
                         this.open_settings(window, cx);
                     })),
@@ -6465,9 +6471,9 @@ impl Render for Handpic {
                             .child(
                                 h_flex()
                                     .gap_2()
-                                    .text_sm()
+                                    .text_size(px(13.))
                                     .text_color(cx.theme().foreground)
-                                    .child(img(icons::APP).size(px(16.)))
+                                    .child(img(icons::APP).size(px(18.)))
                                     .child("Handpic"),
                             )
                             .child(self.settings_button(cx)),
@@ -6480,7 +6486,7 @@ impl Render for Handpic {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_sm()
+                            .text_size(px(13.))
                             .text_color(cx.theme().foreground)
                             .child(div().min_w_0().truncate().child(context::folder_title(dir)))
                     })),

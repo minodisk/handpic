@@ -223,10 +223,11 @@ embeds `icons/icon.ico` as the exe's icon resource ID 1 on Windows
 (`winresource`), it sets the app identity (`IDENTIFIER`, "Handpic") at
 startup so its OS notifications can be delivered, its window opens with
 `app_id` `IDENTIFIER` under
-gpui-component's `TitleBar` (the app icon and "Handpic" at `text_sm`, the
+gpui-component's `TitleBar` (the app icon at 18 px and "Handpic" at 13 px, the
 open folder's name at the same size centered across the whole bar by a
 listener-free overlay and truncated before the sides, and at its right end
-a gear `Button` whose click opens the settings as `ctrl+,` does, its press
+a gear `Button`, the thin `settings` derivative in a square-cornered box the
+bar's height wide and high like a window control's, whose click opens the settings as `ctrl+,` does, its press
 kept from the bar's window drag) in place of the OS title bar, and
 `packaging/` holds the macOS `Info.plist` and the Linux
 `dev.minodisk.handpic.desktop` the `app:bundle:macos` (`Handpic.app` under
@@ -368,8 +369,9 @@ click on an item does, the window writing the changed sort or filter;
 the right end of the header row on the strip's top edge, the
 color label rows gpui-component `Tag`s, the other leads Lucide icons
 from `src/icons.rs` (served by `Icons`, the application's one
-`AssetSource`, to `svg().path(..)`: the two own derivatives, the filled
-star and the frowning `scan-face`, under their license header,
+`AssetSource`, to `svg().path(..)`: the three own derivatives, the filled
+star, the frowning `scan-face` and the title bar's thin `settings` gear,
+under their license header,
 then the `gpui-kit-assets` catalog icons selected with `icon_assets!`
 (the orientation rectangles, `scan-face` and the closed-eyes mark's
 `eye-off`), then
