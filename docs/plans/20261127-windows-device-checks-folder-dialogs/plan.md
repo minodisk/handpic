@@ -113,7 +113,7 @@ of truth for every edit.
   - The other option for each is to keep a narrowed box, which would keep the Step 3 item alive with one box.
 - **The setup boxes are closed though the run used other paths** (`D:\handpic-c4-checks\`, not `D:\Photos\tests\20261113-gpui-folder-dialogs\`), and each "Record the results in the archived `learnings.md`" box is closed by this folder's `results.md`, not by an edit of `docs/plans/_archived/20261113-gpui-folder-dialogs/learnings.md`. The other option is to add a pointer line to that archived `learnings.md`; not planned, as the earlier device-check plans did not.
 - **C4 goes beyond the request's literal list.** The bullet sits in the folder-rename section, not the folder dialogs one. Without C4 it would keep calling a hand check pending whose `todo.md` item this plan deletes. Decided: C4 is applied.
-- **`a held sidecar request's dialog opening once the scan ends` stays in "Not verified headless".** It was seen on 2026-11-23 according to the Step 3 background this plan deletes, but not in this run.
+- **`a held sidecar request's dialog opening once the scan ends` moves out of "Not verified headless" into a `Seen (2026-11-23, …)` bullet.** It was seen on 2026-11-23 (`_archived/20261123-windows-device-checks-mcp-visual/results.md`), and the Step 3 background this plan deletes was the only other pointer to it.
 - **The watcher finding appears in `docs/agents/app.md` (C1's last point and C2's new item) before its fix lands.** The delegated session `dlg-c4-import-watch` will edit the import paragraph and may want to reword these two.
 - **The finding gets no `todo.md` item of its own**: it lives in the narrowed Import box and names the delegated session.
 - **Pointers to `../plans/20261113-gpui-folder-dialogs/learnings.md` in `docs/agents/app.md` are left as they are** (C2's closing sentence). The folder is archived, so the backticked path is stale, but fixing it is outside this change.
@@ -121,3 +121,5 @@ of truth for every edit.
 - **`todo.md` is edited by other sessions**; an item reworded on `main` between planning (`f5cab4bf`) and the edit must be re-read, not overwritten.
 
 ## Progress
+
+- 2026-11-27: Step 1 applied (A to D): the `docs/agents/app.md` bullets, the `todo.md` boxes closed, the results file and `learnings.md`. PR number: to be added once the PR exists.

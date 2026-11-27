@@ -5617,9 +5617,12 @@ the backdrop's condition and the gate's `Held` variant.
   open date folder stayed empty until that folder's copies ended (results
   in
   `../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
-- Not verified headless: a held sidecar request's dialog opening once the
-  scan ends; the strip filling while an import into the open folder runs
-  (it did not on 2026-11-27, above). The hand checks are pending in
+- Seen (2026-11-23, Windows 11, through MCP): a `rewrite_sidecars` and a
+  `delete_sidecars` during pass 1 of a fresh index noted `waiting for the
+  scan to finish`, and the dialog opened once pass 2 ended (results in
+  `../plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
+- Not verified headless: the strip filling while an import into the open
+  folder runs (it did not on 2026-11-27, above). The hand checks are pending in
   `../plans/20261113-gpui-folder-dialogs/learnings.md` and, for the
   component `Dialog`,
   `../plans/_archived/20261114-gpui-component-adoption/learnings.md`.
