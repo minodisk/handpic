@@ -798,7 +798,7 @@ all-faces-check plan's `measurement.md`, the 640x448 floor's before and
 after in the gate-floor-no-af plan's.
 
 The entry point's other faces count from the same 0.6 since 2026-11-28
-(`allfaces::candidates`), so the faces the gate counts are judged too. It
+(`allfaces::candidates`), so a face the gate counts is no longer left out of the judged ones on its score alone. It
 adds no detection, one face mesh per added face: on the frames at gate 5 or
 more, 3.0 added meshes per frame on the Leica groups of `2026-02-01` and
 0.46 on the first 300 frames of `2026-11-07`, about 130 and 20 ms at the

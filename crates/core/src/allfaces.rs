@@ -64,8 +64,9 @@ pub const GATE_MAX_SIZE: f32 = 2.0;
 /// `FACE_CONFIDENCE` (see the all-faces-check plan's `measurement.md`). On
 /// the 640x448 search of a frame without one, members of a posed group score
 /// 0.64 to 0.75 too, so the gate counts from this floor there as well (the
-/// gate-floor-no-af plan's `measurement.md`). Pass 3's candidates take the same floor, so the faces
-/// the gate counts are judged (the candidates-floor plan's `measurement.md`).
+/// gate-floor-no-af plan's `measurement.md`). Pass 3's candidates take the
+/// same floor, so a face the gate counts is no longer left out on its score
+/// alone (the candidates-floor plan's `measurement.md`).
 pub const GATE_LOW_RES_CONFIDENCE: f32 = 0.6;
 
 /// The intersection over the smaller of the two boxes' areas above which a
