@@ -50,3 +50,13 @@
   file's position unchanged after the Downs. Do not move the pointer after
   the right-click (hover sets the highlight). Record the run in `results.md`.
   The step's checkbox was ticked on the automated criteria (the UI tests).
+
+## Manual check (2026-11-28, wrap-up)
+
+- The pending check above was run on this host and passed on both menus
+  (`results.md`). It needed no foreground window: messages posted to the
+  app's own `hwnd` (found by PID) drove the right-click and the arrow keys
+  while the user's terminal stayed in front, so the shared keyboard and
+  pointer were never touched.
+- Found on the way: the strip's `Copy Path` copies the verbatim `\?\`
+  prefix the tree's leaves out; filed in `todo.md`, not fixed here.

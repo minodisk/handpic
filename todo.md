@@ -34,6 +34,17 @@ Files: `docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, `crates/core
 #### TODO
 
 - [ ] When real bursts of another make are on the host, run `lumascore.patch`'s subcommand (in `docs/plans/_archived/20261128-af-luma-reuse/`) and `burst_spearman.py one` on them, and record the within-burst Spearman and the top-frame share. If the ranking holds, update the "other makes' AF bursts were not checked" sentence in `docs/agents/shared-crates.md`; if it breaks, restrict the reuse by make and bump `FACES_VERSION`.
+/^>>>>>>> d968115f/d
+### App: the strip's Copy Path copies the Windows verbatim prefix
+
+#### Background
+
+Seen on 2026-11-28 (Windows 11) while checking the right-click menus' keys (`docs/plans/_archived/20261128-context-menu-keys/results.md`): the strip menu's `Copy Path` on `_DSC1495.ARW` put `\\?\D:\Photos\tests\20261128-cmk\photos\_DSC1495.ARW` on the clipboard, while the tree menu's `Copy Path` put `D:\Photos\tests\20261128-cmk` (no prefix). The strip's handler in `crates/app/src/main.rs` (`context::Action::CopyPath` next to `RevealFile`, which does use `context::shown_path`) joins the listed paths as they are. Files: `crates/app/src/main.rs`, `crates/app/src/context.rs`.
+
+#### TODO
+
+- [ ] Pass each path through `context::shown_path` before the strip's `Copy Path` joins them, with a test, so the clipboard holds `D:\...` as the tree's does.
+>>>>>>> d968115f (docs: record the plan and wrap-up for context-menu-keys)
 
 ### App: confirm the split-deferred-open test fails without its fix
 
@@ -909,7 +920,7 @@ Files: `crates/app/src/theme.rs`, `crates/app/src/main.rs`, `crates/app/src/sett
 
 #### TODO
 
-- [ ] On Windows, with a menu open. Escape closes it only. A keymap key (for example `p`) closes it and acts. Left / Right close it and page the strip. Up / Down move the highlight and Enter runs the item. A press outside closes it. A second right-click elsewhere replaces it. After each close the keymap works again (the focus is back on the view), and a press on the menu while the tree had the keyboard hands it back.
+- [ ] On Windows, with a menu open. Escape closes it only. A keymap key (for example `p`) closes it and acts. Left / Right close it and page the strip. A press outside closes it. A second right-click elsewhere replaces it. After each close the keymap works again (the focus is back on the view), and a press on the menu while the tree had the keyboard hands it back. (Up / Down moving the highlight and Enter running the item were fixed and checked on both menus on 2026-11-28: `docs/plans/_archived/20261128-context-menu-keys/results.md`; the `menu_takes_*` UI tests pin them with Escape, `p` and Right.)
 
 ### App: real-device check of the catalog-served icons (native-catalog-icons)
 

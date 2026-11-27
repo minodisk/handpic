@@ -5441,6 +5441,13 @@ it inside, as the Tauri `menuPosition`.
   it or reaching the view, Enter runs the highlighted copy item and hands the
   focus back, `escape` only closes, and on the strip `right` closes and
   pages and `p` closes and picks.
+- Test trap: the UI tests' opened temporary folder is never a tree row, since
+  its name starts with `.tmp` and it sits under `AppData`, both hidden from the
+  tree (on Linux and macOS the leading dot alone hides it). A tree test
+  therefore presses the first root's row (the `tree-first-row` selector on row
+  0, the list scrolled to the top first) and compares the clipboard with that
+  row's path and name. The strip's cells `div` carries `strip-cells`, and the
+  second cell is hit at its origin plus one pitch.
 - Not verified headless: the hand checks are pending in
   `../plans/20261113-gpui-tree-trash/learnings.md` and, for the `PopupMenu`
   version of these menus (the pointer-side flip, the hand-back of the tree's
