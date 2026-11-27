@@ -19,7 +19,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 
 ## Purpose
 
-Since [macos-ci-bundle-reuse](../_archived/20261127-macos-ci-bundle-reuse/plan.md)
+Since [macos-ci-bundle-reuse](../20261127-macos-ci-bundle-reuse/plan.md)
 switched the macOS bundle step to `--features screenshot`, no CI job before
 the `Package` workflow builds `crates/app` without GPUI's `test-support`:
 `cargo clippy --all-targets` and `cargo test` see it through the
@@ -40,7 +40,7 @@ Rationale (goes into the PR body):
    release.
 2. The Linux leg, because it is the fastest runner and is not under the
    30-minute timeout pressure of the macOS leg (which "The macOS bundle step
-   reuses the test build" in [app.md](../../agents/app.md) just trimmed); and
+   reuses the test build" in [app.md](../../../agents/app.md) just trimmed); and
    a check, because it is cheaper than a build.
 
 ## Steps
