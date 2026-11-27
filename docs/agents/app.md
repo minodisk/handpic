@@ -4614,6 +4614,23 @@ the message is an `absolute`, full-size, centered child in `muted_foreground` at
   the sort / filter menus are deferred, `occlude()`d layers, and the
   settings an `occlude()`d layer painted after the main layout, so a press
   on them does not reach the message.
+- Rule: the message's text is a `min_w_0` child `div` of the centered
+  container (`debug_selector` `empty-text`), never a bare string child, so
+  it wraps within the canvas less the container's 16 px `p_4` on each side,
+  centered by `text_center`. A bare string child is a flex item whose
+  minimum width is its whole single line (GPUI's text element takes a wrap
+  width only when its width is known or the available width is definite,
+  `elements/text.rs`, as in "A meta pane value that does not fit beside its
+  label goes under it"), so in a narrow preview (`PREVIEW_MIN` is 240 px) it
+  stayed one line, spilling over the tree and under the meta pane. In a wide
+  preview the child's basis is its one-line width, so it is still one line.
+  The 16 px padding is wider than the 5 px drag bands of the pane borders
+  (`pane_handle`), so the wrapped text never reaches them. The click target
+  stays the full-size container, which the bands occlude. The UI test
+  `the_no_folder_message_wraps_inside_a_narrow_preview_and_still_opens_the_picker`
+  checks the text inside a 240 px preview, taller than in the default
+  window, and its click opening the picker, on the test text system's
+  synthetic glyph widths.
 - Rule: "the current file's preview failed" is `shown` being
   `Shown::Failed` at `pager.current()` with the 1:1 view off (Tauri's
   `previewFailedSeq === seq && !comparing && !zoomed`; there is no compare

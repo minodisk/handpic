@@ -5251,6 +5251,12 @@ impl Handpic {
             .text_center()
             .text_size(px(14.4))
             .text_color(cx.theme().muted_foreground);
+        // A bare string child never shrinks below its one line, so it would
+        // spill past the preview onto the side panes.
+        let text = div()
+            .debug_selector(|| "empty-text".to_owned())
+            .min_w_0()
+            .child(text);
         if state != empty::State::NoFolder {
             return message.child(text).into_any_element();
         }
