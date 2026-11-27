@@ -27,7 +27,7 @@ session under herdr by sending `/exit` to its own pane. On the first real run
 leading-slash argument as a Windows path, so the session did not end. With the
 command guarded against that conversion, a finished develop run can close its
 pane as the earlier work
-([plan](../_archived/20261128-develop-decide-by-recommendation/plan.md))
+([plan](../20261128-develop-decide-by-recommendation/plan.md))
 intended.
 
 ## Steps
