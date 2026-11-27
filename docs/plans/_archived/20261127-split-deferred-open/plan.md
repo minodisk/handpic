@@ -21,7 +21,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 
 While a `Rename by Capture Date…` run is in flight, a click on a folder in the tree is not opened but kept in `deferred_open` (`open` in `crates/app/src/main.rs`, under `gate.in_flight()`), and the run's end opens it. Unlike the inline rename, a date run does not register in `folderops.renames`, so `refuse_renaming` does not refuse a click on the folder being split or on a folder under it. When the split then removes the folder (`Split::removed`), `date_folder_ran`'s split branch still goes to `settle_folder_run`, which opens the deferred folder: a folder that no longer exists.
 
-After this work, a deferred open naming the removed split folder (or a folder under it) lands where an open of it would after the split, the first date folder, as the branch for the open folder already does; with no date folder it is dropped. The `todo.md` item that recorded this is removed. It was noticed and left out by the reveal-collapsed-rename work ([its plan](../_archived/20261127-reveal-collapsed-rename/plan.md)).
+After this work, a deferred open naming the removed split folder (or a folder under it) lands where an open of it would after the split, the first date folder, as the branch for the open folder already does; with no date folder it is dropped. The `todo.md` item that recorded this is removed. It was noticed and left out by the reveal-collapsed-rename work ([its plan](../20261127-reveal-collapsed-rename/plan.md)).
 
 ## Steps
 
