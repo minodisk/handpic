@@ -452,6 +452,18 @@ test restore's `restored` list for it, not just that the files return.
   `trash::run_listed` holds this rule for both `trash_listed` and
   `delete_for_good`; a foreign path never stands for a RAW of the folder.
   Source: `docs/plans/20261126-trash-keeps-shared-xmp/plan.md`.
+- `Delete Permanently…`'s remover, `trash::remove_one`, is a plain
+  `remove_file`. A file that is read-only by its permissions or by the
+  Windows read-only attribute is removed like any other
+  (`a_delete_removes_a_read_only_file`, run on Linux, macOS and Windows). A
+  macOS file locked with the `uchg` flag (Finder's `Locked` box) is not:
+  `remove_one` returns an error, the run lists it as a `Failure` and the
+  file stays (`a_delete_leaves_a_locked_file_in_place`, macOS only).
+  Handpic does not clear the flag first: a locked or protected file then
+  needs the user's own unlock before it goes, as Finder asks before it
+  deletes a locked item. macOS's msdosfs is believed to show a FAT card's
+  read-only attribute, a camera's protect, as `uchg`; CI does not test that.
+  Source: `docs/plans/_archived/20261128-todo-delete-read-only/plan.md`.
 - Once the engine has recorded the run, the app must keep its undo entry
   even if the open folder changed meanwhile; only the strip refresh is
   conditional on the open folder being the run's folder.
