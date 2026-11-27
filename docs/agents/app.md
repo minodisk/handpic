@@ -3446,6 +3446,20 @@ calls `std::process::abort()`, so a hang inside a GPUI call or on a lock
 ends the test binary in about a minute and names where it stopped, instead
 of the CI job's 30-minute limit with no output.
 
+The watchdog's `on_fire` receives only the phase line (`watchdog_report`,
+pure in the label, the elapsed time and the limit). The production closure
+(`abort_with`) writes and flushes that line first and only then calls
+`log_lines`, which takes the `LOG` mutex, so the phase still reaches stderr
+when the hung thread holds that lock. `Ui::read` and direct `ui.cx` calls are
+not instrumented: a hang inside one is reported as
+`test body, after <last phase>`.
+
+- Rule: do not treat a `the quit handlers took` 1.5 s to 4.0 s failure
+  against `QUIT_MAX` in `ci:local`'s whole-crate parallel run on a shared
+  host as a regression of the quit path. It flaked before the watchdog, and
+  the UI tests alone and a rerun passed. Run the UI tests alone first. See
+  [the watchdog's learnings](../plans/_archived/20261128-uitest-watchdog/learnings.md).
+
 - Rule: build a UI test on `Ui`, wait on the app's threads with
   `wait_until`, never a fixed sleep, and drop the `Ui` to end it.
 - Rule: a UI test that times out is diagnosed from its log lines, not by
