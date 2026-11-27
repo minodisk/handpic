@@ -170,7 +170,7 @@ Files: `docs/plans/_archived/20261007-head-pose/pose-truth.md`, `docs/plans/_arc
       unknown or whether the label stands.
 - [ ] On Windows, open the sheets `D:\Photos\tests\2026-10-07-head-pose\sheets\s00.png` to `s16.png` (4 tiles across, row by row in the `#` order of the `pose-truth.md` table; crops in `crops\`) and compare each tile to its row. Note any label to change. If labels change, re-run `aggregate.py` (in `D:\Photos\tests\2026-10-07-head-pose\`) and update `pose-results.md` and the plan's Decision if a number moves.
 
-### Agents: confirm `pr-runner` waits for a child's hand-back on a real `/pr` run
+### Agents: confirm `pr-runner` waits for a review-round child's hand-back on a real `/pr` run
 
 #### Background
 
@@ -182,42 +182,39 @@ background were `TaskStop`ped and re-run in the foreground. What remained was
 `git ls-remote`, `gh pr view`) while a child it had dispatched was still
 running. The `pr-runner-child-handback` plan added a rule to
 `.claude/agents/pr-runner.md` that the runner ends its turn after an `Agent`
-dispatch and waits for the child's hand-back. It is verified only statically.
+dispatch and waits for the child's hand-back.
+
+An audit of the `pr-runner` transcripts from 2026-11-13 to 2026-11-27 found
+158 runs with 207 dispatches (`pr-check-fixer` 84, `pr-conflict-resolver`
+123), every one of which ended the turn and waited for the hand-back with no
+polling in between. `pr-review-planner` and `pr-review-addresser` were never
+dispatched, so the review-round path is still unexercised. Plan:
+`docs/plans/_archived/20261128-agent-rules-from-transcript-audit/plan.md`
 
 #### TODO
 
-- [ ] On the next real `/pr` run whose PR hits a conflict, a CI failure or a
-      review round, read the `pr-runner` subagent transcript (the subagent
-      `.jsonl` files under the Claude Code project directory for that
-      session) and confirm that after each `Agent` dispatch the runner ended
-      its turn, the next event is the "[Subagent hand-back]" message, and
-      there is no `wait-pr-actionable.sh`, `sleep`, `until` / `while`,
+- [ ] On the next real `/pr` run that reaches a review round, read the
+      `pr-runner` subagent transcript (the subagent `.jsonl` files under the
+      Claude Code project directory for that session) and confirm that after
+      each `pr-review-planner` / `pr-review-addresser` dispatch the runner
+      ended its turn, the next event is the "[Subagent hand-back]" message,
+      and there is no `wait-pr-actionable.sh`, `sleep`, `until` / `while`,
       `git ls-remote` / `git fetch` or `gh pr view` call in between. If not
       clean, adjust `.claude/agents/pr-runner.md`.
 
-### Agents: confirm `merger` runs its step 6 commands as separate, verbatim calls on a real `/pr` run
+### Agents: confirm `pr-runner` script calls carry no `cd` prefix and are not doubled on a real `/pr` run
 
 #### Background
 
-The `merger-separate-sync-calls` plan added a rule to `.claude/agents/merger.md` step 6: `mise run git:main` and `./tools/git/delete_merged_branches.sh` run as two separate Bash calls, each exactly as written in its code block (no pipes, no `2>&1`, no `tail`, no `;` / `&&` chaining, no `cd` prefix). The rule exists because the chained or piped forms match neither allow rule in `.claude/settings.json`, so they fall to the auto mode classifier, which can deny the sandbox bypass as a Safety Bypass. The merger then stops with `post_merge_sync_failed` after a merge that already succeeded (PR #657). CI covers only the Markdown formatting. A prose rule cannot be unit-tested, so it has never been exercised by a real unattended merger run. Plan: `docs/plans/_archived/20261003-merger-separate-sync-calls/plan.md`
+The `pr-runner-verbatim-script-calls` plan extended `.claude/agents/pr-runner.md` §4 so that every script under `.claude/skills/**/scripts` it runs, the `wait-pr-actionable` call above all, is run exactly as written in its code block as a standalone Bash call: no pipes, no `tail`, no redirects, no `; echo exit=$?`, no `${PIPESTATUS[...]}`, no `;` / `&&` chaining. The rule exists because of PR #671, where `bash .claude/skills/pr/scripts/wait-pr-actionable.sh 671 | tail -12; echo exit=${PIPESTATUS[0]}` missed the `Bash(bash .claude/skills/pr/scripts/*)` allow rule and waited about 62 minutes before it ran. The script then printed `ACTION=ready` at about 150 s, but the call did not return until the 600 s timeout, most likely because a lingering child held the pipe open. A bare re-run returned in 2 s. Plan: `docs/plans/_archived/20261004-pr-runner-verbatim-script-calls/plan.md`
 
-Files: `.claude/agents/merger.md`
-
-#### TODO
-
-- [ ] On the next real `/pr` run that reaches the merger, read the `merger` subagent transcript (the subagent `.jsonl` files under the Claude Code project directory for that session). Confirm that step 6 issued `mise run git:main` and `./tools/git/delete_merged_branches.sh` as two separate Bash calls, each with exactly the text in its code block and `dangerouslyDisableSandbox: true`, and that the run did not end with `post_merge_sync_failed`. If a pipe, redirect or chain appears, or a denial recurs, strengthen the wording in `.claude/agents/merger.md` step 6.
-
-### Agents: confirm `pr-runner` runs its skill scripts verbatim as standalone calls on a real `/pr` run
-
-#### Background
-
-The `pr-runner-verbatim-script-calls` plan extended `.claude/agents/pr-runner.md` §4 so that every script under `.claude/skills/**/scripts` it runs, the `wait-pr-actionable` call above all, is run exactly as written in its code block as a standalone Bash call: no pipes, no `tail`, no redirects, no `; echo exit=$?`, no `${PIPESTATUS[...]}`, no `;` / `&&` chaining. The rule exists because of PR #671, where `bash .claude/skills/pr/scripts/wait-pr-actionable.sh 671 | tail -12; echo exit=${PIPESTATUS[0]}` missed the `Bash(bash .claude/skills/pr/scripts/*)` allow rule and waited about 62 minutes before it ran. The script then printed `ACTION=ready` at about 150 s, but the call did not return until the 600 s timeout, most likely because a lingering child held the pipe open. A bare re-run returned in 2 s. CI covers only the Markdown formatting. A prose rule cannot be unit-tested, so it has never been exercised by a real unattended pr-runner run. Plan: `docs/plans/_archived/20261004-pr-runner-verbatim-script-calls/plan.md`
+An audit of the `pr-runner` transcripts from 2026-11-13 to 2026-11-27 found none of the 3,137 script calls decorated with a pipe, `tail`, a redirect, `${PIPESTATUS[...]}` or `sleep`. What remained: 17 runs (127 calls) prefixed `cd <worktree> &&` though the cwd is already the worktree (still 3 of 24 runs after commit 739a17ee), 4 calls chained with other commands, and 2 runs that sent the same wait call twice in one message. The `agent-rules-from-transcript-audit` plan added two prohibitions to §4: no `cd` prefix, and never the same script call twice in one message. Plan: `docs/plans/_archived/20261128-agent-rules-from-transcript-audit/plan.md`
 
 Files: `.claude/agents/pr-runner.md`
 
 #### TODO
 
-- [ ] On the next real `/pr` run, read the `pr-runner` subagent transcript (the subagent `.jsonl` files under the Claude Code project directory for that session). Confirm that every `.claude/skills/**/scripts` call, especially `wait-pr-actionable.sh`, has exactly the text in its code block with no pipe, `tail`, redirect, `; echo exit=$?`, `${PIPESTATUS[...]}` or chaining, and that none waited long before starting or was moved to the background after the script finished. If a decorated call appears, strengthen the wording in `.claude/agents/pr-runner.md` §4.
+- [ ] On real `/pr` runs after the `agent-rules-from-transcript-audit` PR merges, read the `pr-runner` subagent transcripts (the subagent `.jsonl` files under the Claude Code project directory for that session). Confirm that no `.claude/skills/**/scripts` call carries a `cd` prefix and that no script call is sent twice in one message. If either recurs, strengthen the wording in `.claude/agents/pr-runner.md` §4.
 
 ### Core: Nikon DX-crop and non-standard-crop AF point mapping is unverified
 
