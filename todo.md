@@ -747,17 +747,18 @@ Files: `crates/app/src/main.rs` (`strip_tips`, `paint_face_icon`), `crates/app/s
 - [ ] On Windows, over a cell with a tooltip, click, ctrl / shift click, right-click and wheel. Expect them to still select, open the menu and scroll.
 - [ ] On macOS and Linux, when at hand, repeat the checks above (the learnings call for Windows first and "when at hand" for the other two).
 
-### App: the strip's stars have a dark outer outline and its face focus icons do not
+### App: real-device check of the strip marks' one dark outline (strip-marks-outline)
 
 #### Background
 
-Seen on Windows 11 on 2026-11-23 (results in `docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`): on screen the strip's stars are drawn with a dark outer outline while the face focus icons (Good / Low) are not; the user wants the strip's icon drawing unified. In the code both paint dark copies under the mark (`paint_marks`, the stars "over a 1 px dark copy"; `paint_face_icon`, over dark copies for the `drop-shadow` halo, at `overlay::HALO`), so why the icon's halo does not show is not known. `paint_face_icon` also draws the closed-eyes mark in slot 1 (#1257), which the run (`3918064c`) predates, so it was not seen.
+On Windows 11 on 2026-11-23 the strip's stars showed a dark outer outline and the face focus icons did not, and the user wanted the strip's marks drawn one way, like the stars. The `strip-marks-outline` change paints the face focus icon, the closed-eyes mark and the burst badge as the stars are painted: the mark over one black copy of itself 1 px down and right (`MARK_SHADOW`), in place of the eight copies at `overlay::HALO`'s offsets, which the `f` overlay's face labels keep. CI, the unit tests and a capture through the MCP `screenshot` tool showed the new drawing on Windows; the capture showed no burst badge, and colors and legibility are left to the user's eye. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261127-strip-marks-outline/plan.md`.
 
-Files: `crates/app/src/main.rs` (`paint_marks`, `paint_face_icon`, `paint_burst_badge`), `crates/app/src/overlay.rs` (`HALO`).
+Files: `crates/app/src/main.rs` (`paint_marks`, `paint_face_icon`, `paint_burst_badge`, `MARK_SHADOW`).
 
 #### TODO
 
-- [ ] Find why the face focus icon's halo does not show, decide one drawing for the strip's marks (the stars, the face focus icon, the closed-eyes mark, the burst badge) with the user, and apply it.
+- [ ] On Windows, on a scanned folder that includes a burst (frames within `BURST_GAP_MS`, so the badge shows) and a closed-eyes mark over a bright area, check on screen that the strip's stars, face focus icon, closed-eyes mark and burst badge each have the same dark outline (one dark copy down and right), and that each reads over both bright and dark parts of a photo.
+- [ ] On macOS and Linux (any platform at hand), repeat the same check.
 
 ### App: real-device checks of the gpui-component adoption (theme, Input, controls, menus, Root, the three Dialogs)
 
