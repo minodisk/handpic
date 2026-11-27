@@ -1629,6 +1629,9 @@ impl Handpic {
             menu
         });
         menu.focus_handle(cx).focus(window, cx);
+        // Else the root's focus-on-press, later in the same press, takes the
+        // keyboard back for the view.
+        window.prevent_default();
         let dismissed = cx.subscribe(&menu, |this, _, _: &DismissEvent, cx| {
             this.context = None;
             cx.notify();
@@ -5726,6 +5729,9 @@ impl Handpic {
             .when(self.tree_open_row == Some(at), |s| {
                 s.font_weight(FontWeight::SEMIBOLD)
             })
+            .when(at == 0, |s| {
+                s.debug_selector(|| "tree-first-row".to_owned())
+            })
             .child(
                 h_flex()
                     .w_full()
@@ -6646,6 +6652,7 @@ impl Render for Handpic {
                     )
                     .children(self.panels.strip.then(|| {
                         let cells = div()
+                            .debug_selector(|| "strip-cells".to_owned())
                             .relative()
                             .w_full()
                             .h(px(strip_geometry.height + stripheight::GUTTER))

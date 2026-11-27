@@ -4220,8 +4220,13 @@ auto-repeated press calls no `cx.notify()`.
 - Seen on Windows 11 on 2026-11-22: the strip's right-click `PopupMenu`
   opening did not end the hold (the photo stayed gray while `g` was down),
   and the held `g`'s key-up with the menu open did, which the rule's
-  `PopupMenu` case does not predict; no cause was traced
-  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
+  `PopupMenu` case does not predict
+  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`). The
+  cause, confirmed by the right-click menu's UI tests: the root `div`'s
+  focus-on-press took the focus back from the menu in the same press, so the
+  view never lost it. The open now prevents the press's default (see "The
+  right-click menu is gpui-component's `PopupMenu` at the pointer"), so the
+  rule's `PopupMenu` case holds.
 
 ### The performance overlay is a band painted last in the preview canvas (Inferred)
 
@@ -5394,10 +5399,20 @@ row's menus. `open_context` builds the menu with `PopupMenu::build`: a
 through a `WeakEntity` with the item's action and the target taken at the
 open; `.min_w(180 px)`, `.scrollable(true)` and `.max_h` of the height cap
 as the window stands at the open; `.action_context(self.focus)`. It focuses
-the menu at once, as `ContextMenu` does, and keeps the entity, the pointer's
+the menu at once, as `ContextMenu` does, and calls `window.prevent_default()`
+on the press, and keeps the entity, the pointer's
 window position and the `DismissEvent` subscription together in the view's
 `context` field (`ContextOpen`), the subscription clearing it, so a replaced
 menu's late dismiss cannot clear the new one.
+
+- Rule: the open prevents the press's default. The view's root `div` tracks
+  the view's focus handle, and GPUI gives every focus-tracking `div` a
+  bubble-phase mouse-down listener (any button) that focuses its handle
+  unless `window.default_prevented()`; the root is an ancestor of the tree
+  rows and the strip's cells, so without it that listener runs after the
+  right press's own in the same dispatch and takes the focus back from the
+  menu, the menu's key context leaves the dispatch path and every key,
+  Up / Down / Enter too, reaches `key_down`, which closes the menu.
 
 `context_layer` draws it as `div().absolute()` holding
 `deferred(anchored().position(at))` at `POPUP_PRIORITY` (`gpui_kit::base`,
@@ -5472,10 +5487,24 @@ it inside, as the Tauri `menuPosition`.
   name, or the strip's targets' listed paths (prefix and all, as the Tauri
   app wrote them) and file names, one per line, through
   `cx.write_to_clipboard(ClipboardItem::new_string(..))`.
+- Tested: `uitest.rs`'s `the_strip_menu_takes_the_arrows_and_enter_and_hands_other_keys_on`
+  and `the_tree_menu_takes_the_arrows_and_enter` right-press a strip cell
+  and the tree's first row and pin the key routing with a menu open: the
+  menu's handle has the focus, Up / Down move the highlight without closing
+  it or reaching the view, Enter runs the highlighted copy item and hands the
+  focus back, `escape` only closes, and on the strip `right` closes and
+  pages and `p` closes and picks.
+- Test trap: the UI tests' opened temporary folder is never a tree row, since
+  its name starts with `.tmp` and it sits under `AppData`, both hidden from the
+  tree (on Linux and macOS the leading dot alone hides it). A tree test
+  therefore presses the first root's row (the `tree-first-row` selector on row
+  0, the list scrolled to the top first) and compares the clipboard with that
+  row's path and name. The strip's cells `div` carries `strip-cells`, and the
+  second cell is hit at its origin plus one pitch.
 - Not verified headless: the hand checks are pending in
   `../plans/20261113-gpui-tree-trash/learnings.md` and, for the `PopupMenu`
-  version of these menus (the pointer-side flip, the key routing with a menu
-  open, the hand-back of the tree's keyboard), in
+  version of these menus (the pointer-side flip, the hand-back of the tree's
+  keyboard), in
   `../plans/_archived/20261116-native-context-menu/learnings.md`.
 
 ### The tree takes the keyboard through one flag in the view (Inferred)
