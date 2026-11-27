@@ -168,3 +168,5 @@ Background that explains the split, for the docs wording:
 
 ## Progress
 
+
+(2026-11-28) Step 1 complete
