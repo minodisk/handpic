@@ -1234,10 +1234,47 @@ fn restore_listed(
         run,
         in_trash,
         Path::exists,
-        |items| ::trash::os_limited::restore_all(items).map_err(|e| e.to_string()),
+        |items| {
+            let back: Vec<_> = items.iter().map(restored_paths).collect();
+            let result = ::trash::os_limited::restore_all(items).map_err(|e| e.to_string());
+            for (bin, original) in &back {
+                remove_index_file(bin, original);
+            }
+            result
+        },
         restore_item,
         progress,
     )
+}
+
+/// The Recycle Bin path of `item`'s data file (`TrashItem::id` in trash
+/// 5.2.9) and its original path, taken before `restore_all` consumes it.
+#[cfg(windows)]
+fn restored_paths(item: &::trash::TrashItem) -> (PathBuf, PathBuf) {
+    (PathBuf::from(&item.id), item.original_path())
+}
+
+/// Delete the `$I` index file `restore_all` leaves in the Recycle Bin for a
+/// file that came back: its `$R` data file is gone and its original path
+/// holds it.
+#[cfg(windows)]
+fn remove_index_file(bin: &Path, original: &Path) {
+    if bin.exists() || !original.exists() {
+        return;
+    }
+    if let Some(index) = index_file_of(bin) {
+        let _ = std::fs::remove_file(index);
+    }
+}
+
+/// The Recycle Bin's `$I` index file of the `$R` data file at `data`: the
+/// same folder, the leading `$R` of the name replaced by `$I`. None for a
+/// name not starting with `$R`.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn index_file_of(data: &Path) -> Option<PathBuf> {
+    let name = data.file_name()?.to_str()?;
+    let rest = name.strip_prefix("$R")?;
+    Some(data.with_file_name(format!("$I{rest}")))
 }
 
 /// Restore `run` one file at a time: `restore_all` is a loop of single
@@ -1263,6 +1300,8 @@ fn restore_item(trashed: &Trashed, item: ::trash::TrashItem) -> Result<(), Strin
         (Some(_), Some(parent)) => create_missing(parent)?,
         _ => Vec::new(),
     };
+    #[cfg(windows)]
+    let (bin, original) = restored_paths(&item);
     if let Err(e) = ::trash::os_limited::restore_all([item]) {
         remove_created(&created);
         return Err(match e {
@@ -1270,6 +1309,8 @@ fn restore_item(trashed: &Trashed, item: ::trash::TrashItem) -> Result<(), Strin
             e => e.to_string(),
         });
     }
+    #[cfg(windows)]
+    remove_index_file(&bin, &original);
     match &trashed.restore_to {
         Some(to) => relocate(&trashed.path, to, &created),
         None => Ok(()),
@@ -1344,15 +1385,40 @@ fn move_again(paths: Vec<PathBuf>, progress: impl FnMut(usize, usize)) -> (Summa
 #[cfg(test)]
 mod tests {
     use super::{
-        cleared, create_missing, delete_for_good, groups_of, newest_by_path, redo, redo_chunked,
-        relocate, remove_one, restore, restore_chunked, restore_recorded, run, run_chunked,
-        run_listed, trash_key, Back, Group, Restored, Runs, Summary, TrashRun, Trashed,
-        ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS, NOT_IN_TRASH, RAW_NOT_RESTORED,
+        cleared, create_missing, delete_for_good, groups_of, index_file_of, newest_by_path, redo,
+        redo_chunked, relocate, remove_one, restore, restore_chunked, restore_recorded, run,
+        run_chunked, run_listed, trash_key, Back, Group, Restored, Runs, Summary, TrashRun,
+        Trashed, ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS, NOT_IN_TRASH, RAW_NOT_RESTORED,
     };
     use crate::listing::{read_listing, stat_sidecars};
     use crate::sidecar::SidecarFormat;
     use std::cell::RefCell;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn index_file_of_replaces_the_leading_r_in_the_same_folder() {
+        let folder = Path::new("bin").join("S-1-5-21");
+        assert_eq!(
+            index_file_of(&folder.join("$R61PDVO.txt")),
+            Some(folder.join("$I61PDVO.txt"))
+        );
+        assert_eq!(
+            index_file_of(&folder.join("$R61PDVO")),
+            Some(folder.join("$I61PDVO"))
+        );
+        assert_eq!(
+            index_file_of(&folder.join("$RAB$R.arw")),
+            Some(folder.join("$IAB$R.arw"))
+        );
+    }
+
+    #[test]
+    fn index_file_of_gives_none_without_the_r_prefix() {
+        let folder = Path::new("bin").join("S-1-5-21");
+        assert_eq!(index_file_of(&folder.join("DSC0001.ARW")), None);
+        assert_eq!(index_file_of(&folder.join("$I61PDVO.txt")), None);
+        assert_eq!(index_file_of(&folder.join("a$R61PDVO.txt")), None);
+    }
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("handpic-trash-{name}-{}", std::process::id()));

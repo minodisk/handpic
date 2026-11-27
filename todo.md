@@ -45,6 +45,16 @@ Seen on 2026-11-28 (Windows 11) while checking the right-click menus' keys (`doc
 
 - [ ] Pass each path through `context::shown_path` before the strip's `Copy Path` joins them, with a test, so the clipboard holds `D:\...` as the tree's does.
 
+### Engine: real-device check that an undo of Move to Trash leaves no `$I` file on Windows (undo-recycle-index-cleanup)
+
+#### Background
+
+`undo-recycle-index-cleanup` makes the engine delete the Recycle Bin's `$I` partner of every item that `restore_all` really restored, in `restore_listed`'s chunk closure and in `restore_item` (`crates/engine/src/trash.rs`, `remove_index_file`). The unit tests cover only the `$R` to `$I` name mapping (`index_file_of`); no test touches the real Recycle Bin. `mise run ci:local` was stopped by host memory pressure and not re-run, so the PR's GitHub checks verified the build. The delete itself was never exercised against a real Recycle Bin through the app. Plan: `docs/plans/_archived/20261128-undo-recycle-index-cleanup/plan.md`. Files: `crates/engine/src/trash.rs`.
+
+#### TODO
+
+- [ ] On Windows, count the `$I` files in the volume's `$Recycle.Bin\<SID>\` folder. Run the app with `mise run app:dev:screenshot` (private `--index`, `--settings` and `--log` under a scratchpad folder, `--mcp-port 47842`) on fixtures copied to a temporary folder. Move files to the Trash, undo, and count again. Expect the count unchanged and the files back. Not run in the implementing session: the host was under memory pressure that had already killed a local `ci:local`, so the app build was deferred.
+
 ### App: confirm the split-deferred-open test fails without its fix
 
 #### Background
@@ -473,7 +483,6 @@ Run 45091844682 attempt 1, `app (ubuntu-latest)` (job 137424185183, 2026-11-23, 
 - [ ] When the watchdog next fires in CI, read the phase and the log lines from the job log, find the cause and fix it. Done when the cause is fixed.
 
 ### Core: re-measure the import copy pipeline against Explorer on a fast destination
-
 #### Background
 
 The import-from-card feature's `riffle-cli copybench` measured the copy pipeline (8 MiB x 4 buffers, per-file `sync_all`) only against `D:` (a Crucial BX500, DRAM-less, 96 % full). That drive capped every method at 8-22 MB/s, including `robocopy`, while the card read alone ran at 135 MB/s. The numbers cannot tell the methods apart, and Explorer itself was never timed. The defaults stay at 8 MiB x 4, and `FILE_FLAG_SEQUENTIAL_SCAN` and dropping `sync_all` showed no gain on that drive. Plan: docs/plans/_archived/20261106-import-from-card/plan.md.
@@ -484,16 +493,6 @@ Files: `crates/core/src/copy.rs`, `crates/cli/src/main.rs`, `docs/humans/perform
 
 - [ ] Copy the same fresh, never-read files from the card into a destination on a faster or emptier drive (the NVMe `C:`) by `handpic-cli copybench <card-dir> <dst-dir>` and by an Explorer copy, with idle time between runs, and record the MB/s. Done when the table in `docs/humans/performance.md` has the Explorer row and the 8 MiB x 4 defaults and the per-file `sync_all` are confirmed or changed.
 
-### Engine: Undo of Move to Trash leaves an orphaned `$I` file per restored file on Windows
-
-#### Background
-
-Found by `trash-over-scan` Step 4's measurement. trash 5.2.9's Windows `restore_all` moves the `$R` file back and nothing removes its `$I`. Riffle's Undo restores through the same call, so it presumably leaves one for every file it brings back. D: already held 5327 older orphans naming other paths (source not traced, left alone). Each is small and the shell does not list them, but they pile up and cost a file record each. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md` (safety record).
-Files: `crates/engine/src/trash.rs` (`undo_run`, `restore`).
-
-#### TODO
-
-- [ ] Check whether Explorer's own restore cleans up its `$I`, and whether the crate (or Riffle after `restore_all`) can remove the orphan.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 

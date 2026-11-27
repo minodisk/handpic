@@ -130,4 +130,10 @@ the plan's set, to tell `chunk-100` from `whole`.
   Each names its original path, so exactly those under the bench folder with no
   `$R` partner were deleted; 0 remain. 5327 older orphans naming other paths
   and the 2186 real items were left as they were.
+  - Follow-up, 2026-11-27 (Windows 11, trash 5.2.9): Explorer's own restore
+    (the shell verb `undelete`) leaves the `$I` file too. `TrashItem.id` is
+    the `$R` file's path, and the `$I` partner (same folder, the leading `$R`
+    replaced by `$I`) can be deleted with user permission, the item not
+    showing in the Recycle Bin afterwards. Handpic's undo now deletes the `$I`
+    of every item that came back after each `restore_all`.
 - The bench folder is gone, with every copy in it. The sources were only read.
