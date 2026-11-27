@@ -1243,11 +1243,11 @@ The agent-run-device-checks work (plan: `docs/plans/_archived/20261127-agent-run
 
 #### Background
 
-The develop-decide-by-recommendation work (plan: `docs/plans/_archived/20261128-develop-decide-by-recommendation/plan.md`) made the develop main agent end its Claude Code session after the final report when nothing else is pending. Inside herdr (`HERDR_ENV=1`) it makes `sleep 5; herdr pane send-text "$HERDR_PANE_ID" "/exit"; herdr pane send-keys "$HERDR_PANE_ID" enter` its last tool call, as a background, unsandboxed Bash call, so `/exit` lands once the turn is idle. The `herdr pane send-text` and `herdr pane send-keys` commands were confirmed to exist with `herdr pane --help`. Nothing exercised the call on a real run. The open risk is the timing: the background command's exit re-invokes the main agent close to the moment `/exit` is submitted. Files: `.claude/skills/develop/SKILL.md` (§ Finishing the run).
+The develop-decide-by-recommendation work (plan: `docs/plans/_archived/20261128-develop-decide-by-recommendation/plan.md`) made the develop main agent end its Claude Code session after the final report when nothing else is pending. Inside herdr (`HERDR_ENV=1`) it makes `sleep 5; MSYS_NO_PATHCONV=1 herdr pane send-text "$HERDR_PANE_ID" "/exit"; herdr pane send-keys "$HERDR_PANE_ID" enter` its last tool call, as a background, unsandboxed Bash call, so `/exit` lands once the turn is idle. The `herdr pane send-text` and `herdr pane send-keys` commands were confirmed to exist with `herdr pane --help`. The first real run (PR #1343's own run, 2026-11-28, Windows, Git Bash), still without `MSYS_NO_PATHCONV=1`, typed `/exit` as `C:/Program Files/Git/exit`: MSYS path conversion rewrote the leading-slash argument, Enter was delivered, and the session stayed open; the background command's completion re-invoked the agent and did not visibly break anything. SKILL.md was corrected for the conversion (plan: `docs/plans/_archived/20261128-develop-exit-pathconv/plan.md`). The open risk is the timing: the background command's exit re-invokes the main agent close to the moment `/exit` is submitted. Files: `.claude/skills/develop/SKILL.md` (§ Finishing the run).
 
 #### TODO
 
-- [ ] On Windows, in herdr, let one real develop run reach the final `MERGED` with nothing else pending. Check that the "Decisions taken without asking" list is written, that the background `/exit` call is the last tool call, and that `/exit` lands once the turn is idle and the session closes with the worktree left for `wrangle`'s reap. Note whether the command's completion re-invokes the agent before `/exit` is submitted. Done when one real develop run in herdr ends with /exit submitted and the session closed, and SKILL.md § Finishing the run is corrected if it was not. Not runnable here: it needs a real develop run inside herdr to its final `MERGED`, and whether the session closed is the user's to observe.
+- [ ] On Windows, in herdr, let one real develop run reach the final `MERGED` with nothing else pending. Check that the "Decisions taken without asking" list is written, that the background `/exit` call is the last tool call, and that `/exit` lands once the turn is idle and the session closes with the worktree left for `wrangle`'s reap. Note whether the command's completion re-invokes the agent before `/exit` is submitted. Done when one real develop run in herdr, with the `MSYS_NO_PATHCONV=1` fix, ends with `/exit` submitted once the turn is idle and the session closed, and SKILL.md § Finishing the run is corrected if it was not. Not runnable here: it needs a real develop run inside herdr to its final `MERGED` with the fix in place, and whether `/exit` landed and the session closed is the user's to observe.
 
 ### Core: non-faces among pass 3's candidates on AF frames (candidates-floor)
 
@@ -1284,3 +1284,13 @@ Files: `docs/humans/performance.md`, `docs/humans/performance.ja.md`.
 #### TODO
 
 - [ ] On an idle host, with the user's go-ahead for repeated runs, alternate the before and after builds as `docs/humans/performance.md` does (`handpic-cli allfaces <files> 1`, fastest of three) on `2026-02-01` and the first 300 ARW of `2026-11-07`, and add the measured per-file times to the "All-faces check (Windows 11)" section of both languages.
+
+### Docs: state the Git Bash `MSYS_NO_PATHCONV=1` rule once for every `/`-leading argument
+
+#### Background
+
+The rule lives only in the Inno Setup section of `docs/agents/app.md` (the `ISCC.exe` entry, around line 836), yet it has now bitten an unrelated command. The develop-exit-pathconv work (plan: `docs/plans/_archived/20261128-develop-exit-pathconv/plan.md`) found that `herdr pane send-text "$HERDR_PANE_ID" "/exit"` became `C:/Program Files/Git/exit`. Git Bash rewrites any native-exe argument that starts with `/`. Sessions that shell out load `CLAUDE.md`, not `app.md`, so they never see the rule. Files: `CLAUDE.md`, `docs/agents/app.md`, `.claude/skills/develop/SKILL.md`.
+
+#### TODO
+
+- [ ] Pick one option: (a) one line in `CLAUDE.md`'s Windows host paragraph next to the `mise x --` rule, or (b) a short Windows-shell guide under `docs/agents/`, linked from `app.md` and the develop skill. Write the general rule once, and make the `app.md` `ISCC.exe` entry point to it. Done when one option is chosen, the general rule is written once, and the `app.md` `ISCC.exe` entry points to it.
