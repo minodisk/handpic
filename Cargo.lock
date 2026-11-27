@@ -944,7 +944,7 @@ dependencies = [
 
 [[package]]
 name = "handpic-cli"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "handpic-core",
@@ -954,7 +954,7 @@ dependencies = [
 
 [[package]]
 name = "handpic-core"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "handpic-engine"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
