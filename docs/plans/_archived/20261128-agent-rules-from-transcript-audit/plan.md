@@ -141,4 +141,4 @@ body carries them and their reasons (the counts above).
 
 ## Progress
 
-- (2026-11-28) Step 1 complete. `mise run ci:local` was not run locally (docs-only change); the PR's GitHub checks verify it.
+- (2026-11-28) Step 1 complete
