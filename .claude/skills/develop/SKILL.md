@@ -642,7 +642,11 @@ plan folder when 3.5 moves it):
    seen, on which date, citing `results.md` by its post-archive path.
 4. **Settle its outcome**; each candidate ends in exactly one:
    - **Passed whole**: no `todo.md` item. When an existing item covered it,
-     delete this host's box (the item when no box is left)
+     delete this host's box (the item when no box is left). A multi-platform
+     check is settled box by box: it passes whole only when every box was run
+     and passed; otherwise its other-platform boxes end as **Not run**, filed
+     from `todo-curator`'s Markdown with this host's box removed and the
+     Background noting what was seen here
    - **Passed in part**: an item (new, or the existing one edited) holding
      only the sub-points not run, each with its reason
    - **Failed**: a bug item with the reproduction from `results.md`, not
