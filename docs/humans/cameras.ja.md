@@ -28,6 +28,28 @@
 | SIGMA BF | ✓ | – | – | – |
 | SIGMA fp L | – | – | – | – |
 | Leica M11-P | – | – | – | – |
+| Leica M10-R | – | – | – | – |
+| Leica M10 | – | – | – | – |
+| Leica SL2 | – | – | – | – |
+| Leica Q2 | – | – | – | – |
+| Leica CL | – | – | – | – |
+| Pentax K-1 Mark II | – | – | – | – |
+| Pentax K-1 | – | – | – | – |
+| Pentax K-3 Mark III | – | – | – | ✓ |
+| Pentax K-3 Mark III Monochrome | – | – | – | ✓ |
+| Pentax K-70 | – | – | – | – |
+| Pentax KP | – | – | – | – |
+| Ricoh GR III | – | – | – | – |
+| Ricoh GR IIIx | – | – | – | – |
+| Apple iPhone 12 Pro | – | – | – | ✓ |
+| Google Pixel 8 Pro | – | – | – | ✓ |
+| Google Pixel 7 Pro | – | – | – | ✓ |
+| Samsung Galaxy S23 Ultra | – | – | – | ✓ |
+| Samsung Galaxy S23+ | – | – | – | ✓ |
+| Samsung Galaxy S23 | – | – | – | ✓ |
+| Samsung Galaxy S22 Ultra | – | – | – | ✓ |
+| Samsung Galaxy S22 | – | – | – | ✓ |
+| Samsung Galaxy S21 Ultra | – | – | – | ✓ |
 | Canon EOS R | ✓ | ✓ | – | ✓ |
 | Canon EOS RP | ✓ | ✓ | – | ✓ |
 | Canon EOS R3 | ✓ | ✓ | – | ✓ |
@@ -155,6 +177,10 @@ OM System と Olympus のカメラでは、Handpic はまだ AF 点を読みま�
 Sony α9 III と α7CR のサンプルはすべてマニュアルフォーカスで撮られていて、Handpic はそれを AF 点なしとして扱うため、この 2 機種は未確認です。残りの Sony のカメラで、顔追尾の列の `–` は、そのカメラのサンプルに顔追尾が記録されていなかったという意味で、カメラにその機能がないという意味ではありません。顔追尾が記録されていても、枠の下に顔があるとは限りません。α6700 のサンプルのうち 2 枚は、何もない背景と、市場の屋台に並んだパンの上に枠があるのに顔追尾を記録しています。また、AF 点がちょうどセンサーの中心にあるときは追尾が一度も合焦しなかったものとして、Handpic は枠を無視します。
 
 Sony α9 II、α7R IV、α7R IVA、α7C、α6400、α6600、ZV-E10 にはフルサイズの埋め込み JPEG がなく、1616x1080 のプレビュー（ZV-E10 は 1920x1080）と 160x120 のサムネイルしか入っていません。これらのカメラの等倍表示は、ORF と同じく、センサーの画素ではなくそのプレビューを元のサイズで表示します。
+
+縦位置は α6400A（ILCE-6400A）のサンプル（Exif の `Orientation` が 8）で確認しました。Handpic はこのファイルを正しい向きで表示し、フォーカスマークは被写体の上に来ます。画像と AF 点の回転はどの Sony のカメラでも同じ処理なので、ほかのカメラは個別には確認していません。
+
+上の表の Leica、Pentax、Ricoh、Apple、Google、Samsung のカメラは DNG を書き出します。これらのサンプルはどれも AF 点、AF 枠のサイズ、顔追尾を記録していません。Pentax と Ricoh のサンプルではレンズ名が表示されず、Leica M10 のサンプルでは絞り値が表示されません。どちらもメーカーノートにしか記録されておらず、Handpic はまだそれを読まないためです。Pixel 7 Pro のサンプルの埋め込み JPEG は 1280x964 で、長辺がちょうど下限の 1280 px です。
 
 Leica M（Typ 240）と M Monochrom（Typ 246）は表に載せていません（どちらも 2016 年より前の発売です）が、DNG は開けます。DNG のプレビューには 160x120 の JPEG しか入っていないので、Handpic はメーカーノートにある 1472x976 の JPEG をプレビューと等倍表示に使います。等倍表示は ORF と同じく、その JPEG を元のサイズで表示します。Handpic がこの JPEG を読むようになる前にインデックスしたフォルダーは、ファイルが変わるかキャッシュを消去する（設定の `Cache` ページの `Clear Cache`）まで、160x120 のサムネイルと、それで測った値のままです。
 

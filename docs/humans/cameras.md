@@ -42,6 +42,28 @@ and delist the bodies that fell below it, as a docs-only change.
 | SIGMA BF | ✓ | – | – | – |
 | SIGMA fp L | – | – | – | – |
 | Leica M11-P | – | – | – | – |
+| Leica M10-R | – | – | – | – |
+| Leica M10 | – | – | – | – |
+| Leica SL2 | – | – | – | – |
+| Leica Q2 | – | – | – | – |
+| Leica CL | – | – | – | – |
+| Pentax K-1 Mark II | – | – | – | – |
+| Pentax K-1 | – | – | – | – |
+| Pentax K-3 Mark III | – | – | – | ✓ |
+| Pentax K-3 Mark III Monochrome | – | – | – | ✓ |
+| Pentax K-70 | – | – | – | – |
+| Pentax KP | – | – | – | – |
+| Ricoh GR III | – | – | – | – |
+| Ricoh GR IIIx | – | – | – | – |
+| Apple iPhone 12 Pro | – | – | – | ✓ |
+| Google Pixel 8 Pro | – | – | – | ✓ |
+| Google Pixel 7 Pro | – | – | – | ✓ |
+| Samsung Galaxy S23 Ultra | – | – | – | ✓ |
+| Samsung Galaxy S23+ | – | – | – | ✓ |
+| Samsung Galaxy S23 | – | – | – | ✓ |
+| Samsung Galaxy S22 Ultra | – | – | – | ✓ |
+| Samsung Galaxy S22 | – | – | – | ✓ |
+| Samsung Galaxy S21 Ultra | – | – | – | ✓ |
 | Canon EOS R | ✓ | ✓ | – | ✓ |
 | Canon EOS RP | ✓ | ✓ | – | ✓ |
 | Canon EOS R3 | ✓ | ✓ | – | ✓ |
@@ -175,6 +197,18 @@ The Sony α9 II, α7R IV, α7R IVA, α7C, α6400, α6600 and ZV-E10 embed no
 full-size JPEG, only the 1616x1080 preview (1920x1080 on the ZV-E10) and a
 160x120 thumbnail. Their 1:1 view shows that preview at its own size, as ORF
 does, not the sensor's pixels.
+
+Portrait orientation is confirmed on an α6400A (ILCE-6400A) sample shot with
+the camera turned (Exif `Orientation` 8): Handpic shows it upright and the
+focus mark lands on the subject. Handpic turns the image and the AF point the
+same way on every Sony body, so the other bodies are not checked one by one.
+
+The Leica, Pentax, Ricoh, Apple, Google and Samsung bodies above write DNG.
+None of their samples recorded an AF point, an AF frame size or face
+tracking. The Pentax and Ricoh samples show no lens name, and the Leica M10
+sample shows no aperture: these bodies record them only in their MakerNote,
+which Handpic does not read for them yet. The Pixel 7 Pro sample's embedded
+JPEG is 1280x964, exactly at the 1280 px floor.
 
 The Leica M (Typ 240) and M Monochrom (Typ 246) are not listed (both were
 released before 2016), but their DNGs open. Their DNG previews hold only a
