@@ -104,3 +104,5 @@ fallback opens, and the guide says why the deb leaves a Riffle install alone.
   state (decided by the caller: surgical change).
 
 ## Progress
+
+- (2026-11-27) Step 1 complete
