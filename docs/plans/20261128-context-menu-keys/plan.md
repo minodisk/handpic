@@ -162,3 +162,5 @@ the docs already say, and a UI test pins it.
   mouse dispatch would call `prevent_default` with no effect.
 
 ## Progress
+
+- 2026-11-28: Step 1 done (open_context prevents the press's default, the two UI tests, docs/agents/app.md; manual check deferred, see learnings.md)

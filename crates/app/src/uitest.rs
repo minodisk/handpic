@@ -961,7 +961,9 @@ fn the_strip_menu_takes_the_arrows_and_enter_and_hands_other_keys_on() {
     ui.cx.simulate_keystrokes("down up down down");
     assert!(menu_has_keys(&mut ui), "an arrow closed the menu");
     assert_eq!(ui.current(), "b.dng");
-    // Select All, the reveal item, then Copy Path.
+    // `up` from the first item wraps to the last and the next `down` wraps
+    // back to the first (gpui-component's `select_up` / `select_down`), so
+    // the highlight is on Select All; then the reveal item, then Copy Path.
     ui.cx.simulate_keystrokes("down enter");
     assert_eq!(clipboard(&ui).as_deref(), Some(b.as_str()));
     assert!(view_has_keys(&mut ui));
@@ -1022,7 +1024,10 @@ fn the_tree_menu_takes_the_arrows_and_enter() {
     ui.cx.simulate_keystrokes("down up down");
     assert!(menu_has_keys(&mut ui), "an arrow closed the menu");
     assert_eq!(ui.current(), "a.dng");
-    // The reveal item, Copy Path, then Copy Folder Name.
+    // `up` from the first item wraps to the last and the next `down` wraps
+    // back to the first (gpui-component's `select_up` / `select_down`), so
+    // the highlight is on the reveal item; then Copy Path, then Copy Folder
+    // Name.
     ui.cx.simulate_keystrokes("down down enter");
     assert_eq!(clipboard(&ui), Some(name));
     assert!(view_has_keys(&mut ui));
