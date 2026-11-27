@@ -3478,7 +3478,12 @@ after about 11 ms, one retry) and fails the test if it is still held after
   dev-dependency's features into a build with no test target, so the check
   sees GPUI without it. It compiles the Linux configuration only, so a
   test-only API under a Windows-only or macOS-only `cfg` still first fails
-  in `Package`.
+  in `Package`. Measured on its first run (run 46027233616, PR #1342, the
+  Linux cache restored): the step took 43 s, its log checking the `gpui-*`
+  crates afresh, and the whole Linux leg 2 min 30 s of its 30-minute limit.
+  `actions/cache` saves only on a missed key, so the check's artifacts enter
+  the cache only when `crates/app/Cargo.lock` next changes; until then each
+  run pays about that.
 
 ### The UI tests drive the view with keys over generated DNGs (Measured)
 
