@@ -146,3 +146,4 @@ Rationale (goes into the PR body):
 
 ## Progress
 
+- 2026-11-28: Step 1 landed: the Linux leg now also checks the app without `test-support`. The CI duration measurement and its sentence in `docs/agents/app.md` follow in a later commit on this PR, from the first CI run (see `learnings.md`).
