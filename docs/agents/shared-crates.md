@@ -383,7 +383,7 @@ every `restore_all` on Windows, the chunk call (on success and on failure)
 and `restore_item`, the engine deletes the `$I` of each item whose `$R` file
 is gone and whose original path now exists, ignoring errors. All measured on
 2026-11-27 with trash 5.2.9 on Windows 11. Source:
-`docs/plans/20261128-undo-recycle-index-cleanup/plan.md`.
+`docs/plans/_archived/20261128-undo-recycle-index-cleanup/plan.md`.
 
 - Source: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md`,
   Steps 1-2.
