@@ -29,3 +29,7 @@
 - The edits were made by short Python scripts that assert each old string
   occurs exactly once, which keeps a concurrent rewording of `todo.md` on
   `main` from being overwritten silently.
+
+## Wrap-up
+
+- After the step, the folder drop was tried again with the `mouse_event` drag from Explorer that `docs/agents/app.md` records. It went unreceived twice; a desktop capture mid-drag showed other sessions' Handpic windows over this session's window at the target, one with its settings open, which swallowed the drop. The attempt was stopped there; the drop boxes stay open. Consolidated into `docs/agents/app.md` ("Driving the window in a real-device run on Windows") with the posted-input and short-preview rules, and the watcher caveat into `docs/agents/shared-crates.md`.

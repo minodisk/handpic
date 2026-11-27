@@ -122,4 +122,4 @@ of truth for every edit.
 
 ## Progress
 
-- 2026-11-27: Step 1 applied (A to D): the `docs/agents/app.md` bullets, the `todo.md` boxes closed, the results file and `learnings.md`. PR number: to be added once the PR exists.
+- 2026-11-27: Step 1 applied (A to D): the `docs/agents/app.md` bullets, the `todo.md` boxes closed, the results file and `learnings.md`.

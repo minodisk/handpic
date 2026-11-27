@@ -3788,6 +3788,29 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
   target, release. The first attempt can go unreceived (no outline); repeat it
   once before calling a drop a failure. Close the Explorer window afterwards
   through `Shell.Application`'s `Windows()` by `LocationURL`, not with keys.
+- Rule: on a desktop other sessions share, capture the desktop
+  (`CopyFromScreen`) before any real-pointer step: `WindowFromPoint` naming a
+  `Handpic` window does not make it this session's, and on 2026-11-27 a drag
+  aimed at this session's window landed on another session's Handpic lying
+  over it (its settings layer swallowed the drop). Stop rather than raise the
+  window over their work
+  (`docs/plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
+- Rule: posted messages (`WM_KEYDOWN` / `WM_KEYUP` with the modifier state set
+  by `AttachThreadInput` + `SetKeyboardState`, and clicks posted at client
+  coordinates) reach this session's window whatever lies over it, and cover
+  Tab, Escape, Enter, `Ctrl+Z`, `Ctrl+,` and right and left clicks, the
+  tree's right-click menu included. They cannot start an OLE drag:
+  `DoDragDrop` from an own `IDropSource` failed with `E_FAIL`, and a WinForms
+  one returned nothing with no outline drawn; one attempt left the left
+  button held down until released by hand, so check the button state after a
+  failed attempt.
+- Rule: a short preview (a 125-file Delete preview, a 9-file import preview)
+  ends before a posted key or a capture arrives. Take `ctrl+,` and `reading …`
+  checks on a long one, such as a 500-JPEG import preview. Keep the material
+  in copies and hardlinks outside the photo folders, and use a fresh
+  `--index`, `--settings` and `--log` per launch with `mcpAllowDestructive`
+  off so each folder operation opens its dialog
+  (`docs/plans/_archived/20261127-windows-device-checks-folder-dialogs/learnings.md`).
 - Rule: measure layout by scanning pixel runs along a row or column of a window
   capture (Neutral dark: pane borders `#1a1a1a`, the status row's border
   `#2f2f2f`, the preview's black surround). A no-folder window keeps the photo

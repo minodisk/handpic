@@ -135,8 +135,16 @@ The canvas did not resize when the circle appeared or went in any layout.
   `E_FAIL` (0x80004005) with no button down, and a WinForms `DoDragDrop`
   started from an injected left press with the cursor moved onto the window
   (`WindowFromPoint` named the Handpic window) drew no outline and returned
-  `None`; one attempt left the left button down until released by hand. The
-  drop checks need a hand drag from Explorer.
+  `None`; one attempt left the left button down until released by hand.
+  Two more tries took the `mouse_event` drag from Explorer that
+  `docs/agents/app.md` records (the item selected, pressed, 60 moves 25 ms
+  apart, a wiggle over the target, release): no outline, no open. A desktop
+  capture taken mid-drag showed why: other sessions' Handpic windows (one
+  with its settings open) lay over this session's window at the target
+  point, so the drag went to theirs, whose settings layer swallowed it. The
+  attempt was stopped there rather than raise this window over other
+  sessions' work. The drop checks need a hand drag from Explorer, or a run
+  with this session's window the topmost one at the target.
 - Filter menu icons on a HiDPI or fractional-scale display: the host has one
   display at 100 %.
 - The macOS and Linux boxes (status row, bursts): not this host.

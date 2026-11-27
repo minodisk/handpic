@@ -1293,6 +1293,12 @@ back into it:
 - Even unfiltered it would terminate: `Index::reconcile_sidecars` reparses a sidecar
   only when its on-disk stat differs from the one `mark_written` stored, so a
   rescan after the app's own write queues nothing.
+- Caveat (Measured, Windows, 2026-11-27): the debounce has no maximum wait, so
+  an unbroken burst never settles. During an import's copy the open date
+  folder's strip stays empty until that folder's copies end. If you change
+  the debounce or re-check an import's strip, check for a maximum wait on
+  `DEBOUNCE` first (a fix is under way in another session)
+  (`docs/plans/_archived/20261127-windows-device-checks-folder-dialogs/learnings.md`).
 
 The price is that an *external* sidecar edit (PhotoLab writing a `.dop`) is not
 picked up live; it lands on the next re-listing (a reopen or the tree's
