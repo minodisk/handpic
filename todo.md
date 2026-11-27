@@ -1259,3 +1259,13 @@ Files: `docs/humans/performance.md`, `docs/humans/performance.ja.md`.
 #### TODO
 
 - [ ] On an idle host, with the user's go-ahead for repeated runs, alternate the before and after builds as `docs/humans/performance.md` does (`handpic-cli allfaces <files> 1`, fastest of three) on `2026-02-01` and the first 300 ARW of `2026-11-07`, and add the measured per-file times to the "All-faces check (Windows 11)" section of both languages.
+
+### Docs: state the Git Bash `MSYS_NO_PATHCONV=1` rule once for every `/`-leading argument
+
+#### Background
+
+The rule lives only in the Inno Setup section of `docs/agents/app.md` (the `ISCC.exe` entry, around line 836), yet it has now bitten an unrelated command. The develop-exit-pathconv work (plan: `docs/plans/_archived/20261128-develop-exit-pathconv/plan.md`) found that `herdr pane send-text "$HERDR_PANE_ID" "/exit"` became `C:/Program Files/Git/exit`. Git Bash rewrites any native-exe argument that starts with `/`. Sessions that shell out load `CLAUDE.md`, not `app.md`, so they never see the rule. Files: `CLAUDE.md`, `docs/agents/app.md`, `.claude/skills/develop/SKILL.md`.
+
+#### TODO
+
+- [ ] Pick one option: (a) one line in `CLAUDE.md`'s Windows host paragraph next to the `mise x --` rule, or (b) a short Windows-shell guide under `docs/agents/`, linked from `app.md` and the develop skill. Write the general rule once, and make the `app.md` `ISCC.exe` entry point to it. Done when one option is chosen, the general rule is written once, and the `app.md` `ISCC.exe` entry points to it.

@@ -105,3 +105,5 @@ intended.
   observation only.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete

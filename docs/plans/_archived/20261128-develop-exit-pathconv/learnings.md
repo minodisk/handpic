@@ -29,3 +29,5 @@
   herdr `/exit` on a real run (develop-decide-by-recommendation)", updated in
   this step and left open. Step 1's checkbox was ticked on the automated
   criteria. Files: `.claude/skills/develop/SKILL.md`, `todo.md`.
+
+- Generalize the Git Bash `MSYS_NO_PATHCONV=1` rule beyond `ISCC.exe`. The rule lives only in the Inno Setup section of `docs/agents/app.md`, yet it has now bitten an unrelated command (`herdr pane send-text /exit` became `C:/Program Files/Git/exit`); Git Bash rewrites any native-exe argument starting with `/`. Sessions that shell out load `CLAUDE.md`, not `app.md`. Change: either (a) one line in `CLAUDE.md`'s Windows host paragraph next to the `mise x --` rule, or (b) a short Windows-shell guide under `docs/agents/` linked from `app.md` and the develop skill. Done when one option is chosen, the general rule is written once, and the `app.md` `ISCC.exe` entry points to it.
