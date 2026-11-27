@@ -1290,7 +1290,9 @@ impl Handpic {
     /// The run came back and the dialog closes. A rename ends in
     /// `folder_renamed`. A split's failures go to the notes and the status
     /// says what moved; when the split folder was the open one it is
-    /// re-listed if it remains, else the first date folder opens; and the
+    /// re-listed if it remains, else the first date folder opens; a click
+    /// on the removed folder or under it, deferred during the run, opens the
+    /// first date folder too, and is dropped when there is none; and the
     /// parent is re-listed in the tree.
     fn date_folder_ran(
         &mut self,
@@ -1333,7 +1335,14 @@ impl Handpic {
             .as_deref()
             .is_some_and(|open| trash::opens_target(open, &[canonical], IGNORE_CASE));
         let first = split.moved.first().filter(|_| split.removed);
-        if self.deferred_open.is_some() || !opens {
+        let gone = split.removed
+            && self
+                .deferred_open
+                .take_if(|folder| {
+                    tree::relation(&folder.to_string_lossy(), &dir, IGNORE_CASE).is_some()
+                })
+                .is_some();
+        if !gone && (self.deferred_open.is_some() || !opens) {
             self.step_note = Some(status);
             self.settle_folder_run(cx);
         } else if !split.removed {
@@ -2219,6 +2228,8 @@ mod tests {
 
     use gpui_kit::{Bounds, Pixels, ScrollDelta, ScrollEvent, point, px};
 
+    use handpic_engine::datefolder::Moved;
+
     use super::*;
     use crate::uitest::{Ui, hold_a_clear_past_the_idle_point};
 
@@ -2504,5 +2515,75 @@ mod tests {
         });
         wait_revealed(&mut ui, "2026-11-27", &renamed);
         ui.read(|view| assert!(!row_of(view, &renamed).expanded));
+    }
+
+    /// `clicked`'s folder `inner` split into a date folder beside it and
+    /// removed, while the open of the folder `deferred` waits for the run;
+    /// the number of opens before the run's end.
+    fn split_inner_with_deferred(ui: &mut Ui, inner: &str, deferred: &str) -> u64 {
+        let opens = ui.update(|view, cx| {
+            view.gate.enter_in_flight();
+            view.tree_row_clicked(deferred.to_owned(), cx);
+            assert!(view.deferred_open.is_some());
+            view.opens()
+        });
+        let canonical = canonicalize(inner);
+        let date = Path::new(inner)
+            .with_file_name("2026-11-27")
+            .to_string_lossy()
+            .into_owned();
+        fs::remove_dir(inner).unwrap();
+        fs::create_dir(&date).unwrap();
+        let split = Split {
+            moved: vec![Moved {
+                name: "2026-11-27".into(),
+                path: date,
+                count: 1,
+            }],
+            failed: Vec::new(),
+            left: Vec::new(),
+            removed: true,
+            warning: None,
+        };
+        ui.update(|view, cx| {
+            view.date_folder_ran(inner.to_owned(), Ok(DateRan::Split(split, canonical)), cx);
+        });
+        opens
+    }
+
+    #[test]
+    fn a_held_click_on_a_folder_a_split_removed_opens_the_first_date_folder() {
+        let mut ui = Ui::open();
+        expanded_folder(&mut ui);
+        let inner = drawn_path(&ui, "inner");
+        let opens = split_inner_with_deferred(&mut ui, &inner, &inner);
+        ui.wait_until("the first date folder's open", |view| {
+            view.dir
+                .as_ref()
+                .is_some_and(|dir| dir.ends_with("2026-11-27"))
+                && view.status_of().idle()
+        });
+        ui.read(|view| {
+            assert_eq!(view.deferred_open, None);
+            assert_eq!(view.opens(), opens + 1);
+        });
+    }
+
+    #[test]
+    fn a_held_click_on_another_folder_opens_it_after_a_split() {
+        let mut ui = Ui::open();
+        let clicked = expanded_folder(&mut ui);
+        let inner = drawn_path(&ui, "inner");
+        let opens = split_inner_with_deferred(&mut ui, &inner, &clicked);
+        ui.wait_until("the held click's open", |view| {
+            view.dir
+                .as_ref()
+                .is_some_and(|dir| dir.ends_with("clicked"))
+                && view.status_of().idle()
+        });
+        ui.read(|view| {
+            assert_eq!(view.deferred_open, None);
+            assert_eq!(view.opens(), opens + 1);
+        });
     }
 }

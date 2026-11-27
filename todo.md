@@ -1,15 +1,15 @@
 # todo
 
 ## Cross-cutting / other
-### App: a `Rename by Capture Date…` split that removes the folder leaves a deferred open naming a missing folder
+### App: confirm the split-deferred-open test fails without its fix
 
 #### Background
 
-The reveal-collapsed-rename work (plan: `docs/plans/_archived/20261127-reveal-collapsed-rename/plan.md`) noticed this while planning and left it out of its PR. In `date_folder_ran`'s split branch, when `self.deferred_open.is_some()` the flow goes to `settle_folder_run`, which opens the deferred folder even when `split.removed` means it is gone. This happens after a click on the split folder, or on a folder under it, during the run. Nobody has run it in the app, and no test covers it. Files: `crates/app/src/folderops.rs` (`date_folder_ran`, `settle_folder_run`), `crates/app/src/main.rs` (`open`, `deferred_open`).
+`split-deferred-open` redirects a deferred open of a folder a `Rename by Capture Date…` split removed to the first date folder (`date_folder_ran` in `crates/app/src/folderops.rs`). Its new UI test `a_held_click_on_a_folder_a_split_removed_opens_the_first_date_folder` (same file) is meant to fail without the fix: the open of the missing `inner` runs and `view.dir` never ends with `2026-11-27`, so it times out in `wait_until`. That failing run was never done, because the local test build was killed for lack of memory; CI only shows the test passes with the fix. Plan: `docs/plans/_archived/20261127-split-deferred-open/plan.md`.
 
 #### TODO
 
-- [ ] Make a deferred open of a folder the split removed land where an open of it would after the split (its first date folder, as the `opens` branch does), or drop it. Add a UI test in `folderops.rs`: hold the gate, click the folder, run a split that removes it, and check what opens.
+- [ ] On a host with memory to spare, revert the `gone` lines in `date_folder_ran` and run `cargo test --bin handpic folderops::tests::a_held_click_on_a_folder_a_split_removed` in `crates/app`. Confirm it fails (times out in `wait_until`), then restore the fix and confirm it passes.
 
 ### App: real-device Ctrl+C and window check of the app:watch task
 
@@ -70,19 +70,21 @@ The strip's `Move to Trash…` moves files through the engine's mover and record
 
 ### Core: face/eye-aware focus check for culling
 
-Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/src/sharpness.rs`) now runs at scan time: sharpness is scored on the Sony eye-AF frame, else on the AF point, else on the eyes of a detected face when there is no trusted AF point, else on the sharpest tile; an AF point off the face no longer scores a bystander's eyes (see `docs/plans/_archived/20260922-face-aware-sharpness/` and `docs/plans/20260924-face-catch-state/`). Without a trusted AF point the whole-preview search now runs at a 640x448 input on a DCT-scaled decode, which raised small-face recall at about 1.7x the earlier per-file cost; closed eyes were found to need a second model (see `docs/plans/_archived/20261005-face-detection-recall-cost/`), which now judges the shown file's eyes on demand, outside the scan, for the meta pane's `Eyes` row (see `docs/plans/_archived/20261007-closed-eyes-detection/`). What remains:
+Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/src/sharpness.rs`) now runs at scan time: sharpness is scored on the Sony eye-AF frame, else on the AF point, else on the eyes of a detected face when there is no trusted AF point, else on the sharpest tile; an AF point off the face no longer scores a bystander's eyes (see `docs/plans/_archived/20260922-face-aware-sharpness/` and `docs/plans/_archived/20260924-face-catch-state/`). Without a trusted AF point the whole-preview search now runs at a 640x448 input on a DCT-scaled decode, which raised small-face recall at about 1.7x the earlier per-file cost; closed eyes were found to need a second model (see `docs/plans/_archived/20261005-face-detection-recall-cost/`), which now judges the shown file's eyes on demand, outside the scan, for the meta pane's `Eyes` row (see `docs/plans/_archived/20261007-closed-eyes-detection/`). What remains:
 
 #### TODO
 
-- [ ] Judge every face at or above the 60 px floor, not only the AF-nearest
-      (or largest) one, so a bystander's blink shows too. Each face is one
-      more model run (~35 ms; ~1.8 faces per file on the 2134-ARW folder,
-      more in groups). Needs either a row per face or
-      a worst-of summary (`Eyes: Closed (1 of 3)`), a pattern the meta pane
-      does not have, and a check of the accuracy on non-subject faces, which
-      `eyes-truth.md` did not label. Files: `crates/engine/src/ondemand.rs`
-      (`read_eyes`), `crates/core/src/eyes.rs` (`judged_face`),
-      `crates/app/src/meta.rs`.
+- [ ] Judge every face at or above the 60 px floor on the frames under the
+      group threshold too, so a bystander's blink shows there. The
+      all-faces check (pass 3, `crates/core/src/allfaces.rs`,
+      `docs/plans/_archived/20261123-all-faces-check/`) already judges
+      every such face, with worst-of counts in the meta pane, the strip's
+      closed-eyes mark and the filter, but only on frames whose gate count
+      reaches `groupMinFaces` (default 5); a frame with two to four faces
+      still shows the judged face alone. Each face is one more model run
+      (~35 ms). Still open too: a check of the accuracy on non-subject
+      faces, which `eyes-truth.md` did not label. Files:
+      `crates/engine/src/index.rs` (`allfaces_todo`), `crates/app/src/group.rs`.
 - [ ] Measure the good-photo mark's precision on labels. Decision B rests
       on the user's stars and the mark rate; no labeled set was made. Done
       when 100-150 faced AF frames drawn stratified around the cuts and at
@@ -90,7 +92,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       `closed`, `turned`, `unsure`; the agent first, the user's review
       final) and the precision and coverage of the mark at its cuts are
       written with a Wilson interval, with `full_eye_sharp >= SOFT_BELOW`
-      alone as the baseline (the procedure is in `docs/plans/20261008-burst-keep-score/plan.md` Step 5). Files: the plan
+      alone as the baseline (the procedure is in `docs/plans/_archived/20261008-burst-keep-score/plan.md` Step 5). Files: the plan
       folder of that work, `crates/engine/src/index.rs` if the cuts move.
 - [ ] Re-check the good-photo cuts after the closed-eyes and head-pose label
       reviews (the items in the sections below). If the user's review
@@ -107,18 +109,18 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       YuNet's eye points by image x, so the eye-line roll folds into -90..+90
       deg. They need another roll source (a mesh pass on rotated crops,
       MediaPipe's tracking loop). Not planned; see
-      `docs/plans/20261010-mesh-roll/` (Decision). Files:
+      `docs/plans/_archived/20261010-mesh-roll/` (Decision). Files:
       `crates/core/src/faces.rs`, `crates/core/src/eyes.rs`.
 - [ ] Review the mesh misfit labels: open the sheets
       `D:\Photos\tests\2026-10-09-mesh-roll\sheets\s00.png` to `s15.png`
       and compare each tile to its row of
-      `docs/plans/20261010-mesh-roll/misfit-truth.md` (`before` / `after`
+      `docs/plans/_archived/20261010-mesh-roll/misfit-truth.md` (`before` / `after`
       `on` or `off` with its kind, and `yunet ok` / `yunet off`). The
       Decision's shares rest on the agent's labels; if labels change,
       re-run `compare.py` in that plan folder and update `compare.md` and
       the Decision if a number moves.
 - [ ] Suggest the sharpest-eye frame within a burst group. Measured and not
-      shipped (`docs/plans/20261008-burst-keep-score/`, Decision 1, `results.md` and `fit.md`): the user
+      shipped (`docs/plans/_archived/20261008-burst-keep-score/`, Decision 1, `results.md` and `fit.md`): the user
       picks within a burst by timing, not by a technical feature; the
       burst's length, not sharpness or the eyes, predicts a kept scene
       (79% held out at 15 or more frames, which the burst band's count
