@@ -4118,6 +4118,10 @@ choosing the circle.
   while idle. Verified on Windows 11 on 2026-11-23: the position `1 / 8`
   stayed at the same x with the circle shown (pass 2) and gone
   (`docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
+  Measured in the other layouts on 2026-11-27: 1379 x 767 with the right
+  pane hidden, 1600 x 767 with both side panes hidden and 1158 x 936 with
+  the strip alone hidden, each the same with the circle shown and gone
+  (`../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
 - Rule: do not use `.loading(true)`: nothing here is indeterminate. Pass 2
   starts at `(0, 0)` and pass 1 can start at a total of 0, so the empty
   track ring shows there.
@@ -5596,15 +5600,26 @@ the backdrop's condition and the gate's `Held` variant.
   during the run, and a reopen with nothing to copy had `Run` dimmed and
   `Cancel` focused (results in
   `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
+- Seen (2026-11-27, Windows 11, keys and clicks posted to the window, the
+  state read through the MCP companion and `screenshot`): Tab moved the
+  outline from the run button to `Cancel` and back on the Rewrite, Sequence,
+  Import and Rename by Capture Date dialogs, and Escape closed each; a
+  125-file Rewrite and a date rename dimmed both buttons under their running
+  note; a Delete Sidecars run took the strip's stars, flag dots and labels
+  and `Ctrl+Z` brought them back; a colliding date rename had `Run`
+  disabled and `Cancel` focused; `ctrl+,` did nothing while an import
+  preview read, with a Sequence dialog up and during a Sequence run; a
+  second `Sequence JPEG Timestamps…` during the preview did nothing; the
+  pane showed `reading …`, `sequencing n / m` and `importing n / m`; a
+  running import's dialog stepped aside, came back on `Import…` with `Run`
+  dimmed and `Cancel` focused, Escape hid it with the run going on, and
+  `Cancel` stopped a run with no `.handpic-tmp` file left; the strip of the
+  open date folder stayed empty until that folder's copies ended (results
+  in
+  `../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
 - Not verified headless: a held sidecar request's dialog opening once the
-  scan ends; Tab back to the run button, and Tab and Escape on the Sequence,
-  Import and Rename by Capture Date dialogs; the dimmed buttons and running
-  note of a sidecar run and of a date rename; `Cancel` focused on a
-  colliding date rename; the strip's marks on a sidecar delete and its
-  undo; `ctrl+,` while a preview reads or a Sequence dialog or run is up; a
-  second Sequence request; the pane's `sequencing n / m`, `reading …` and
-  `importing n / m`; an import's stepping aside, mid-run reopen and cancel.
-  The hand checks are pending in
+  scan ends; the strip filling while an import into the open folder runs
+  (it did not on 2026-11-27, above). The hand checks are pending in
   `../plans/20261113-gpui-folder-dialogs/learnings.md` and, for the
   component `Dialog`,
   `../plans/_archived/20261114-gpui-component-adoption/learnings.md`.
@@ -5691,8 +5706,10 @@ the watcher back when the rename fails or the split leaves the folder.
   opened the first date folder; an existing sibling of the date's name
   disabled `Run` (results in
   `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
-- Not verified headless: the reopen keeping the strip's judgments; the hand
-  check is pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
+- Seen (2026-11-27, Windows 11): a one-date rename run from its dialog
+  reopened the folder under its new name with the strip's two stars kept
+  (results in
+  `../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
 
 ### The tree's inline rename is a text input in the row, held by the gate (Inferred)
 
