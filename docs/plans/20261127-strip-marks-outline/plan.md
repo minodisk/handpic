@@ -152,3 +152,8 @@ What is known about the cause, from reading the code (inferred, not measured):
   photos give neither. The user's on-screen check covers them.
 
 ## Progress
+
+- 2026-11-27: Step 1 done. `paint_face_icon` and `paint_burst_badge` now draw
+  one black copy at `MARK_SHADOW` under the mark, as the stars do. The cause
+  was confirmed on the capture. See `learnings.md` and the `before*` /
+  `after*` captures in this folder.
