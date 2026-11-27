@@ -99,7 +99,9 @@ Stated before the labels, so the readings below are not chosen on them.
 - **Bar 2, a cue is usable sorted last on its own**: the bin's rescue rate
   `RR` (its `keep` share) is at most 25% with the stratified 97.5% quantile
   at most 35%, and the bin holds at most 5% of the population's picks
-  (`PL`, label-free). These are the bars the user chose for
+  (`PL`, label-free; a pick is a frame whose `xmp` or `dop` column in the
+  dump says pick, the source discard-retarget's `PL (full dump)` used).
+  These are the bars the user chose for
   discard-retarget
   ([plan](../_archived/20261019-discard-retarget/plan.md)).
 - **Multiplicity**: one primary reading; every secondary reading is
@@ -108,11 +110,14 @@ Stated before the labels, so the readings below are not chosen on them.
 ## The follow-up rule
 
 1. The primary reading meets bar 1 and the bin of today's `|pitch|` >
-   `GOOD_MAX_PITCH` reads at or above its complement → the Decision
+   `GOOD_MAX_PITCH` reads at or above its complement (the bin's weighted
+   `discard` rate at or above that of all other frames) → the Decision
    recommends a later plan that shows or uses the pitch cue, naming what
    and where.
 2. The primary reading meets bar 1 only through the frames with no pose
-   today → the Decision names "no pose on a found face" as the cue to read
+   today (the `pitch45` frames with no pose today, against all non-`pitch45`
+   frames, meet bar 1, and the `pitch45` frames that still have a pose today
+   do not) → the Decision names "no pose on a found face" as the cue to read
    next.
 3. Otherwise → nothing, and the todo item closes.
 
@@ -125,7 +130,8 @@ model-search, each with its own `π`):
 - `D0-clip`: the weight clip of model-search's `All@32 / HGB / discard`, as
   it was ([model-search](../_archived/20261020-model-search/plan.md));
 - `D0-lin`: discard-model's `LR/T` form and columns;
-- `D0-pick`: the target `discard` and not a pick.
+- `D0-pick`: the target `discard` and not a pick (a pick as in bar 2's
+  `PL`: the dump's `xmp` / `dop` columns).
 
 A variant **passes** when, on this round's labels, a per-folder q5 or q10
 cut meets `RR` <= 25% with the 97.5% quantile <= 35%, `PL` <= 5% and a

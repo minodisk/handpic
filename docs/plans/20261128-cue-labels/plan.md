@@ -372,3 +372,10 @@ Risks:
   after it.
 
 ## Progress
+
+- 2026-11-28: Step 1 done. The 900-frame sample was extracted to
+  `D:\Photos\tests\2026-11-28-cue-labels\`; the numbers matched "The
+  design", and the `manifest.tsv` SHA-256 and the checks are in
+  `learnings.md`. PR: this branch's PR (link added at merge). Review round 1
+  also made the follow-up rule's branch 2 and the source of the picks
+  operational in `cues.md`.
