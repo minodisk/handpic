@@ -632,6 +632,11 @@ retried.
   (`crates/core/src/reader.rs`), thumbnail generation (`crates/core/src/decode.rs`,
   `crates/core/src/scan.rs`). The first pass computes the thumbnail and the
   metadata only.
+- A parser change that moves a value the second pass reads (for example the AF
+  point a RAW parser reports, as in the Nikon crop-mode AF point mapping) needs
+  only the `EXTRACTOR_VERSION` bump. `write_batch` writes a re-extracted row
+  with `faces_extractor = 0`, so pass 2 re-scores it and `FACES_VERSION` stays
+  (source: `../plans/_archived/20261128-nikon-crop-af-point/learnings.md`, Step 1).
 - Bump `SCHEMA_VERSION` only when the table layout changes.
 - An extractor bump re-extracts every row, error rows included, on the next
   scan of each folder, and keeps `ratings`. Stale rows are deleted by

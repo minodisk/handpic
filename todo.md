@@ -233,7 +233,7 @@ showed that `AFInfo2`'s `AFImageWidth` / `AFImageHeight` stay at the
 uncropped size while the JPEGs hold the crop. `nef::af_point` now reads the
 crop from the MakerNote's `CropHiSpeed` / `CropArea` and moves the point by
 the centered offset into the crop's frame, the AF area unscaled, a point
-outside the crop giving none (`docs/plans/20261128-nikon-crop-af-point/`,
+outside the crop giving none (`docs/plans/_archived/20261128-nikon-crop-af-point/plan.md`,
 `docs/agents/raw-metadata-parsing.md`). The metadata confirms the crop is
 the sensor's center, unscaled, but every sample's AF point was at the
 center, where offset and proportional scaling agree. Files:

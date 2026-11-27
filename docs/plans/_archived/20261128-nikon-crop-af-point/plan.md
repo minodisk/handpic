@@ -197,3 +197,5 @@ survey notes in `survey-report.md` of the same scratchpad ("Nikon crop NEFs").
 - **`CropArea` on older Z bodies is unverified.** `CropHiSpeed` gates it.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete
