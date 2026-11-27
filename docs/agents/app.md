@@ -951,9 +951,8 @@ pushes' `release-please` runs nor another candidate.
   production key lives only in the `release` environment, whose deployment
   branch policy allows only `main` (a custom branch policy, admins not
   allowed to bypass), so no workflow run on another ref can read it,
-  whatever that ref's workflow file says, once the repository-level secret
-  is deleted (a manual setting after this lands; until then a job without
-  the `environment:` key still reads it). `release.yml`'s `guard` declares the environment
+  whatever that ref's workflow file says: the repository-level secret is
+  deleted (2026-11-27) and only the environment's copy exists. `release.yml`'s `guard` declares the environment
   unconditionally and `package.yml`'s `macos`, `windows` and `linux` legs
   declare it only under `sign_production` (`name: ${{ inputs.sign_production
   && 'release' || '' }}`), all with `deployment: false`, so the runs create
@@ -971,10 +970,11 @@ pushes' `release-please` runs nor another candidate.
   at `guard` with no step run and `build`, `publish` and `release-please`
   skipped, from the branch policy alone (`deployment: false`). An empty
   environment name means "no environment" (measured, run 45846638280: the
-  four legs of a plain `package.yml` dispatch started). Not yet verified
-  until the user deletes the repository-level secret and cuts a release
-  candidate on `main`: that `verify-release.sh` reports `STATUS=ok`, which
-  proves the legs sign with the `release` environment's secret. The environment, its policy and its secret are the user's to
+  four legs of a plain `package.yml` dispatch started). Verified (measured
+  2026-11-27, run 46003797551): the release of v2.2.0 from `main` passed
+  `guard` and `verify-release.sh v2.2.0` reported `STATUS=ok`; with the
+  repository-level secret already deleted, this shows the legs sign with
+  the `release` environment's secret. The environment, its policy and its secret are the user's to
   change; an agent runs such a `gh api` or `gh secret` command only when
   the user approves it. Still not covered: the key reaches four runners
   that run third-party actions, there is no required reviewer, and anyone

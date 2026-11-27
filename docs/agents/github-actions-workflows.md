@@ -45,11 +45,10 @@ token lacks the `workflow` scope.
 `package.yml` is both `workflow_dispatch` and `workflow_call`. On a direct
 dispatch, `secrets.<NAME>` resolves to the repository secret of that name,
 not to nothing, so a step gated on a repository secret being present would
-use it on any dispatch. `UPDATE_SIGNING_KEY` moves to the `release`
-environment (see the next section) and its repository copy is deleted once
-that lands; until then a direct dispatch on any ref still resolves it to the
-repository copy, and from then on only a dispatch on `main` whose leg
-declares the environment would reach it.
+use it on any dispatch. `UPDATE_SIGNING_KEY` lives only in the `release`
+environment (see the next section), its repository copy deleted on
+2026-11-27, so only a dispatch on `main` whose leg declares the environment
+reaches it.
 
 - Rule: gate what a secret enables on an input declared only under
   `workflow_call` (`sign_production`), which a dispatch cannot pass

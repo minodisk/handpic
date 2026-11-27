@@ -244,3 +244,4 @@ After the merge:
 
 - (2026-11-26) Step 1 complete.
 - (2026-11-27) Verification (a) and the empty-environment-name check measured on the PR branch (runs 45846600132, 45846638280; see `learnings.md`). Still pending, the user's: the repository secret's deletion after the merge and verification (b), filed in `todo.md`.
+- (2026-11-27) Verification (b) passed: v2.2.0 released from `main` (run 46003797551) with the repository secret deleted, and `verify-release.sh v2.2.0` reported `STATUS=ok`.
