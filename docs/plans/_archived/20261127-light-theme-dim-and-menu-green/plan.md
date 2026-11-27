@@ -21,7 +21,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 
 Two colors of `crates/app` were chosen for a dark surface and read badly on a
 light one (seen on Windows 11 on 2026-11-23,
-[results](../_archived/20261123-windows-device-checks-mcp-visual/results.md)):
+[results](../20261123-windows-device-checks-mcp-visual/results.md)):
 
 - A rejected strip cell is dimmed with `Roles::rejected_dim`, which outside
   Neutral dark is the theme's `background` at 0.55 alpha. On a light
