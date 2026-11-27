@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.2.0](https://github.com/minodisk/handpic/compare/v2.1.0...v2.2.0) (2026-11-27)
+
+
+### Features
+
+* **app:** rank get_view's burst frames by full-size eye sharpness ([#1313](https://github.com/minodisk/handpic/issues/1313)) ([37f89a2](https://github.com/minodisk/handpic/commit/37f89a2b288c66c82ffa6764acc7709eb5cb53f9))
+* **app:** retune the title bar's text, icon and settings gear ([#1326](https://github.com/minodisk/handpic/issues/1326)) ([17e8a8a](https://github.com/minodisk/handpic/commit/17e8a8af145c95b6fee9cd2b5a2c213682cbb9cd))
+
+
+### Bug Fixes
+
+* **agents:** bound the wait scripts' slices by real elapsed time ([#1305](https://github.com/minodisk/handpic/issues/1305)) ([739a17e](https://github.com/minodisk/handpic/commit/739a17eefbad36346d2c6866ff4552fe88f036d1))
+* **app:** delete the update staging folder on uninstall ([#1311](https://github.com/minodisk/handpic/issues/1311)) ([5c75a78](https://github.com/minodisk/handpic/commit/5c75a789259d6abf0de04d778f97672bc9bc61d9))
+* **app:** keep a held collapse click's row collapsed across a date-folder rename ([#1322](https://github.com/minodisk/handpic/issues/1322)) ([11b4c64](https://github.com/minodisk/handpic/commit/11b4c64b1d00e4c9475c5e2892fb6fe808f5e0ff))
+* **app:** log the thumbnail reads that can leave strip cells gray ([#1323](https://github.com/minodisk/handpic/issues/1323)) ([4eaf47e](https://github.com/minodisk/handpic/commit/4eaf47ed572ecdc5c46cbffbcb37fed159c6080e))
+* **app:** remove the three themes with no determined license ([#1304](https://github.com/minodisk/handpic/issues/1304)) ([cd47eaa](https://github.com/minodisk/handpic/commit/cd47eaa8905c9a71fa2145a192bc663344e5d5cc))
+* **ci:** bound the Linux apt step and record how to read a timed-out job ([#1314](https://github.com/minodisk/handpic/issues/1314)) ([39474bd](https://github.com/minodisk/handpic/commit/39474bdbaf4485e6654bc73fcd8a7b4a7bd5a00f))
+* **core:** count the gate from 0.6 on frames without an AF point ([#1315](https://github.com/minodisk/handpic/issues/1315)) ([b3c8ba3](https://github.com/minodisk/handpic/commit/b3c8ba33743378e2a2b956ed3327b3c603af0c9f))
+* **core:** match the judged face by its overlap over the smaller box too ([#1319](https://github.com/minodisk/handpic/issues/1319)) ([b7dc0f3](https://github.com/minodisk/handpic/commit/b7dc0f326dac6423b036ba0d449693b7698967f8))
+* **core:** rename the import's copy into place without replacing ([#1306](https://github.com/minodisk/handpic/issues/1306)) ([d68a551](https://github.com/minodisk/handpic/commit/d68a551b6f19586feaf3fb6da90688672a4498cf))
+* **engine:** keep a shared .xmp out of a Move to Trash while a RAW sharing it stays ([#1324](https://github.com/minodisk/handpic/issues/1324)) ([b33af7c](https://github.com/minodisk/handpic/commit/b33af7c515a117f0871a10cbba553965d4cba197))
+* **engine:** move Delete Sidecars in chunks on Windows ([#1303](https://github.com/minodisk/handpic/issues/1303)) ([51475a3](https://github.com/minodisk/handpic/commit/51475a3f150b16b552be869e434d8003bd55a91b))
+
 ## [2.1.0](https://github.com/minodisk/handpic/compare/v2.0.1...v2.1.0) (2026-11-25)
 
 
