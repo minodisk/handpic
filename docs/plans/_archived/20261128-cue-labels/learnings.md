@@ -94,5 +94,9 @@ the whole cell: `2026-07-23` has 2):
   backslashes (`\\2026` arrived as `\202` and became a control byte in
   `todo.md`); a script file fixed it. Write Windows paths into files from a
   script file, not a heredoc.
-- `cues.md` links the earlier plans as `../_archived/<folder>/plan.md`, as
-  `plan.md` does; the archive move has to rewrite them like `plan.md`'s.
+- `cues.md` linked the earlier plans as `../_archived/<folder>/plan.md`, as
+  `plan.md` did; the archive move rewrote both to `../<folder>/plan.md`.
+- The plain `mv` of the plan folder into `_archived/` failed with "Device
+  or resource busy" (another process held the directory); the files were
+  copied and the originals removed instead, leaving an empty directory git
+  does not track.

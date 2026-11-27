@@ -25,7 +25,7 @@ changes nothing here.
   size with a floor of 8 (or the whole cell). `pitch` is positive when the
   face tilts up (`crates/core/src/pose.rs`).
 - **The question**: "OK to discard?", as in discard-labels
-  ([plan](../_archived/20261018-discard-labels/plan.md)), marked the same
+  ([plan](../20261018-discard-labels/plan.md)), marked the same
   way. The guide is `labeling.md` in this folder.
 
 ## Prior knowledge
@@ -38,7 +38,7 @@ Stated before the labels, so the readings below are not chosen on them.
   (model-search, base rate 42.3%), Kish effective sizes 5.9 and 5.2; EAR <=
   0.137 at 38.5% on 56 and 63.4% on 80, effective sizes 15.8 and 20.1;
   `|yaw|` > 35 at 44.0% and 47.6%, effective sizes 40.8 and 35.8. On the
-  strict labels ([bad-photo-labels](../_archived/20261017-bad-photo-labels/plan.md)),
+  strict labels ([bad-photo-labels](../20261017-bad-photo-labels/plan.md)),
   `|pitch|` > 45 read 3.20x the strict base rate on 19 frames, interval
   [0.0, 40.5].
 - **Today's app reads fewer poses.** In `2026-09-27-a` (the app's index at
@@ -52,7 +52,7 @@ Stated before the labels, so the readings below are not chosen on them.
 - **The model changes** named for a further round were partly run already:
   model-search ran the weight clip and logistic forms without gain, and
   discard-model's fresh round put `LR/T` below `eye_focus`
-  ([discard-model](../_archived/20261023-discard-model/plan.md)). The
+  ([discard-model](../20261023-discard-model/plan.md)). The
   pick-excluding target was never run.
 
 ## Labels
@@ -103,7 +103,7 @@ Stated before the labels, so the readings below are not chosen on them.
   dump says pick, the source discard-retarget's `PL (full dump)` used).
   These are the bars the user chose for
   discard-retarget
-  ([plan](../_archived/20261019-discard-retarget/plan.md)).
+  ([plan](../20261019-discard-retarget/plan.md)).
 - **Multiplicity**: one primary reading; every secondary reading is
   reported with its interval and is not a pass on its own.
 
@@ -128,7 +128,7 @@ discard-question labels of the 19 folders (this round, discard-labels,
 model-search, each with its own `π`):
 
 - `D0-clip`: the weight clip of model-search's `All@32 / HGB / discard`, as
-  it was ([model-search](../_archived/20261020-model-search/plan.md));
+  it was ([model-search](../20261020-model-search/plan.md));
 - `D0-lin`: discard-model's `LR/T` form and columns;
 - `D0-pick`: the target `discard` and not a pick (a pick as in bar 2's
   `PL`: the dump's `xmp` / `dop` columns).

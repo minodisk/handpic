@@ -7,7 +7,7 @@ Record additional important information (investigation results, design details) 
 Record what you learn during implementation, and notable events (CI failures, review feedback, plan changes, user intervention), in `learnings.md` as they happen.
 After finishing a step, continue to the next without asking the user.
 lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the linking file's own directory, so write links relative to the plan folder (e.g. `../../humans/usage.md`) and put an example path that is not a real link target in backticks.
-A plan folder moves under `_archived/` when it completes, so link another plan only at its archived path (`../_archived/<folder>/...`) or link a stable non-plan path, and name a plan still in flight as a backticked path. After rebasing onto a main where plan folders moved, re-run the link check (`mise run ci:local` runs lychee when the branch changed Markdown; `mise run lint` always does).
+A plan folder moves under `_archived/` when it completes, so link another plan only at its archived path (`../<folder>/...`) or link a stable non-plan path, and name a plan still in flight as a backticked path. After rebasing onto a main where plan folders moved, re-run the link check (`mise run ci:local` runs lychee when the branch changed Markdown; `mise run lint` always does).
 
 <pr-rules>
 - Include the plan.md update (marking the step done + the Progress entry) in the implementation PR
@@ -20,7 +20,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 ## Purpose
 
 The bad-photo-labels Decision
-([plan](../_archived/20261017-bad-photo-labels/plan.md), "Left for the user
+([plan](../20261017-bad-photo-labels/plan.md), "Left for the user
 to decide") left one question open: a labeling round that gives the **cue
 readings** (head pose, closed eyes and the rest) more power. `|pitch|` > 45
 read 3.20x the strict base rate on 19 sampled frames, interval [0.0, 40.5].
@@ -40,11 +40,11 @@ and the Decision belong to a later plan. **No app code changes.**
 - Exclude frames already labeled.
 - Over-sample the `|pitch|` > 45 stratum.
 - The question is **"OK to discard?"**, as in discard-labels
-  ([plan](../_archived/20261018-discard-labels/plan.md)), marked the same
+  ([plan](../20261018-discard-labels/plan.md)), marked the same
   way (rating 1 = keep, unmarked = OK to discard).
 - A larger blind random group than the 150 controls of discard-labels,
   which stood for 25,071 frames
-  ([discard-retarget Decision](../_archived/20261019-discard-retarget/plan.md)).
+  ([discard-retarget Decision](../20261019-discard-retarget/plan.md)).
 - About 30-50 minutes of labeling at about 3 s per frame.
 - After the investigation below, the user approved this plan as written
   (2026-11-28): the 19 intact folders, the 2,400 excluded frames, the
@@ -81,10 +81,10 @@ and the Decision belong to a later plan. **No app code changes.**
   `D:\Photos\tests\2026-10-17-bad-labels\manifest.tsv` (1,200, strict),
   `D:\Photos\tests\2026-10-18-discard-labels\manifest.tsv` (600) and
   `D:\Photos\tests\2026-10-20-model-search\manifest.tsv` (600, the blind
-  confirmation of [model-search](../_archived/20261020-model-search/plan.md),
+  confirmation of [model-search](../20261020-model-search/plan.md),
   the same question). 1,342 of them are in the 19 intact folders (682, 349,
   311). The fourth round
-  ([discard-model](../_archived/20261023-discard-model/plan.md)) drew from
+  ([discard-model](../20261023-discard-model/plan.md)) drew from
   six other folders.
 - **Prior readings of the cue bins** on those labels, weighted by `1/π`,
   read here for sizing and stated as prior knowledge: `|pitch|` > 45 is "OK
@@ -262,7 +262,9 @@ knowledge of "What is known", including the prior cue-bin readings.
   naming what and where; (2) the primary reading meets bar 1 only through
   the frames with no pose today → the Decision names "no pose on a found
   face" as the cue to read next; (3) otherwise → nothing, and the todo
-  item closes.
+  item closes. `cues.md` holds the operational form of each branch (the
+  rates compared and the with / without a pose today test) and governs
+  where the two differ.
 - **Model variants, secondary and not sized for**: three forms of the
   discard model, trained leave-one-folder-out on the discard-question
   labels of the 19 folders (this round, discard-labels, model-search,
