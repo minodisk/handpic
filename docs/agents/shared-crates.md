@@ -1300,9 +1300,9 @@ picked up live; it lands on the next re-listing (a reopen or the tree's
 
 On Windows, `ReadDirectoryChangesW` keeps a handle on the watched directory,
 which pins the watched folder's ancestors against rename while Handpic has it
-open; renaming the open folder itself succeeds (measured in the next entry).
-Deleting is measured in the next entry. `set` drops the previous watcher before creating the new one, so
-leaving a folder releases it. A watch that cannot be set (SMB, say) is
+open; renaming the open folder itself succeeds, and deleting is free too (both
+measured in the next entry). `set` drops the previous watcher before creating
+the new one, so leaving a folder releases it. A watch that cannot be set (SMB, say) is
 `log::warn!`ed and ignored: the open must not fail, and a re-listing still
 picks up what changed.
 
