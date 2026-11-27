@@ -3917,10 +3917,26 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
   `--mcp-port`, and `{"mcpEnabled": true}` (plus `"mcpAllowDestructive":
   true` where a run must be confirmed) through `--import-settings`
   ([the plan's learnings](../plans/_archived/20261123-windows-device-checks-mcp-visual/learnings.md)).
+- Rule: set the strip's height for a check by writing `stripHeight` into the
+  test `--settings` store between launches; no drag is needed. Only a drag
+  writes it in the app (see "The strip's height is one number, stored under
+  `stripHeight`").
+- Rule: to check the GUI subsystem (no console window) with test stores,
+  start the release exe through `explorer.exe <file>.lnk`, a shortcut whose
+  arguments carry `--index`, `--settings` and `--log`. That launches it
+  through Explorer's ShellExecute, as a double-click does.
+- Rule: make many files or a long burst without copying data by hard-linking
+  one RAW (`ln` in Git Bash on NTFS): 300 RAW plus `.xmp` links gave a
+  Delete Sidecars timing folder, and 120 links of one RAW (one capture time)
+  a 120-frame burst for the three-digit `position/size` badges. The links
+  share one file's data, so a check of per-file content needs real copies
+  ([the plan's learnings](../plans/_archived/20261127-windows-device-checks-c7/learnings.md)).
 - Rule: Git Bash mangles `\\` in JSON arguments, even through stdin
   here-strings. Give the MCP client `D:/...` paths; it converts them to
-  backslashes. A Bash `python -` with no stdin hangs the tool call; run a
-  script as a file with `mise x -- python -I <file>`.
+  backslashes. A Bash `python -` / `python3 -` with no stdin hangs the tool
+  call; run a script as a file with `mise x -- python -I <file>`. The MCP
+  client must print UTF-8 (`sys.stdout.reconfigure(encoding="utf-8")`): the
+  Windows console's cp932 failed on a `–` in a reply.
 - Rule: pass 2 commits rows in batches of 10 (`BATCH`,
   `crates/engine/src/index.rs`), so in a folder of fewer than 10 files the
   `Analysis` group and the strip's face icons appear only when pass 2 ends.

@@ -17,3 +17,15 @@
   was corrected to the `_archived/` path in the rewritten paragraph.
 - Docs only: `mise run ci:local` and cargo builds were skipped on the
   caller's instruction; lychee ran on the changed Markdown.
+
+## Run learnings (2026-11-27)
+
+- The strip's height for a check was set by writing `stripHeight` into the
+  test `--settings` store between launches, with no drag.
+- `explorer.exe <file>.lnk` with arguments launched the release exe the way a
+  double-click does, so the GUI subsystem could be checked with test stores.
+- Hard links (`ln` in Git Bash on NTFS) of one RAW gave 300 RAW + `.xmp` for
+  the Delete Sidecars timing and a 120-frame burst (one capture time) for the
+  three-digit badges, without copying data.
+- The MCP client had to print UTF-8: the Windows console's cp932 failed on a
+  `–` in a reply. A Bash `python3 -` with no stdin hung the tool call.

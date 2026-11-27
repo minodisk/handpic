@@ -153,3 +153,5 @@ The run is done and nothing is run again. Its results are in this folder's
   on the new `origin/main`.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete
