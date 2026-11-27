@@ -709,7 +709,7 @@ Files: `crates/app/build.rs`, `crates/app/src/main.rs`, `crates/app/packaging/ma
 
 #### TODO
 
-- [ ] On Linux, on a Wayland session and on an X11 session, run `mise run app:install:linux` with `~/.local/bin` on `PATH`, then launch Handpic from the application menu. Expect the running window to show the Handpic icon in the dock / taskbar / alt-tab. If it does not, check `StartupWMClass` (X11) and the `.desktop` file's base name (Wayland) against `IDENTIFIER`. Once it passes, remove the "Pending manual checks" bullet under `## Packaging` in `docs/agents/app.md`.
+- [ ] On Linux, on a Wayland session and on an X11 session, run `mise run app:install:linux` with `~/.local/bin` on `PATH`, then launch Handpic from the application menu. Expect the running window to show the Handpic icon in the dock / taskbar / alt-tab. If it does not, check `StartupWMClass` (X11) and the `.desktop` file's base name (Wayland) against `IDENTIFIER`. Once it passes, remove the "Pending manual check" bullet under `## Packaging` in `docs/agents/app.md`.
 
 ### App: real-device checks of the strip's face focus icon and cell tooltips
 
