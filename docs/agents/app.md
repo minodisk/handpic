@@ -1652,6 +1652,14 @@ report of them comes up to `DEBOUNCE` after the last rename, and a menu
 import has the same race (`import_ran` re-lists only on
 `resync.changed()`). A client that needs every copy reads `get_view` again,
 or calls `wait_for_idle` once more, before trusting the listing.
+The cadence a user sees is bound by the scan, not by `MAX_WAIT`: the
+re-listing a report asks for waits for pass 2 and pass 3 on the landed files
+(about 6 s in a debug build on 100 ARWs), and the last files showed about
+14 s after the run ended, so a slow strip fill during an import is the scan,
+not the watcher. An `import_folder` preview is `pending` only after its read
+ends: poll `get_status` for `pending` before the confirming call, or the
+confirm is refused with `a folder operation is under way`
+(`../plans/_archived/20261128-watch-max-wait/learnings.md`).
 
 `rename_folder` is the tree's inline `Rename…` with the name given: the
 engine checks the folder and the name with `rename::folder_target`
@@ -1874,7 +1882,12 @@ full-size eye measure says).
 the scan's channel; each listing calls `watch::set` before `read_listing`, so a
 change during the listing is not missed. The watcher reports a burst
 `DEBOUNCE` (500 ms) after its last event, or `MAX_WAIT` (2 s) after its first
-event while it goes on; the next event starts a new burst. `resync.rs` defers a change that
+event while it goes on; the next event starts a new burst. A due report is
+emitted before the next event is taken, even when `recv_timeout` hands over
+an event past the deadline, so a queue that never runs dry cannot hold a
+report back; while events keep arriving the reports land exactly every
+`MAX_WAIT` (`watch::step` over the pending `Burst`, pure, which the tests
+drive with a synthetic clock). `resync.rs` defers a change that
 arrives while a listing or its scan runs to that scan's end, one pending at
 most, as the Tauri frontend's `resyncPending`: a re-listing mid-scan would
 cancel and restart it. A re-listing carries the current file by path, the

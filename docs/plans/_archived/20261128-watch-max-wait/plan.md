@@ -36,7 +36,7 @@ restarting a scan, so it does not change.
 
 ## Steps
 
-- [ ] Step 1: Give the open folder's watcher a maximum wait, with its test, the docs and a real-device check
+- [x] Step 1: Give the open folder's watcher a maximum wait, with its test, the docs and a real-device check
   - Done when:
     - `watch.rs` holds the maximum wait as a constant (`MAX_WAIT`, about 2 s) next to `DEBOUNCE`, and a burst is reported at the earlier of `DEBOUNCE` after its last event and `MAX_WAIT` after its first event.
     - A unit test in `watch.rs` proves, with synthetic `Instant`s and no sleeping, that an uninterrupted burst (events closer together than `DEBOUNCE`, lasting several `MAX_WAIT`s) is reported once per `MAX_WAIT` interval, that a burst that stops is still reported `DEBOUNCE` after its last event, and that an event after a report starts a new burst.
@@ -76,3 +76,5 @@ restarting a scan, so it does not change.
 - `todo.md`'s "App: real-device checks of Import… (gpui-folder-dialogs Step 5)" section is left untouched, although one of its boxes covers the strip filling during a run.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete

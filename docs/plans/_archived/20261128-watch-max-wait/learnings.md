@@ -18,19 +18,21 @@
   import and the `Import…` rules' `Seen` line were left to the main agent,
   which runs the device check and writes them from its result.
 
+## Device check (2026-11-28)
+
+- Ran on Windows 11 after a reboot (cold cache), 100 hard-linked ARWs
+  (5.2 GB) imported into a folder on V: at 413 MB/s in 12.6 s: the strip
+  went 0 -> 19 -> 70 during the run and 100 after it; `resync:` lines came
+  about every 2 s, those during a scan `deferred`. See `results.md`.
+- The cadence is bound by the scan, not `MAX_WAIT`: a debug build's pass 2
+  and pass 3 on the landed files held the next re-listing for about 6 s, and
+  the last 30 files showed 14 s after the run ended.
+- An MCP `import_folder` preview is pending only after its read ends; poll
+  `get_status` for `pending` before the confirming call, or the confirm is
+  refused with `a folder operation is under way`.
+- The `cargo build` of `crates/app` was killed once for low memory on the
+  shared host; it went through at `-j 2` under a build slot.
+
 ## Deferred issues (todo candidates)
 
-- Pending manual check (Step 1's real-device check, Windows 11 host): with the
-  destination date folder open, run an MCP `import_folder` of about 125 RAW
-  files from a temp copy or hard links of `D:\Photos\tests` (never written
-  under it) on a debug `crates/app` build with the `screenshot` feature,
-  temp `--index` / `--settings` / `--log` / `--import-settings`,
-  `--mcp-port 47830`. Poll `get_view` / `get_status` about once a second and
-  take a few `screenshot`s. Expected: the listed file count rises in several
-  steps before the import ends, and `Handpic.log` shows `resync:` lines (some
-  `deferred`) during the run; record the `import:` line's throughput. Needs
-  the Windows host, a local app build, the test photos and MCP tools with
-  screenshots plus the log. Step 1's checkbox was left unticked for it; the
-  main agent runs it and then writes the app.md `wait_for_idle` paragraph and
-  the `Import…` rules' `Seen` line. Basis: plan Step 1; files
-  `crates/engine/src/watch.rs`, `docs/agents/app.md`.
+- None. Step 1's pending device check was run (see above and `results.md`).
