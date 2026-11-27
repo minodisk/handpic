@@ -440,11 +440,11 @@ The `discard-retarget` Decision (`docs/plans/_archived/20261019-discard-retarget
 
 #### Background
 
-Run 45091844682 attempt 1, `app (ubuntu-latest)` (job 137424185183, 2026-11-23, cold cache), logged `test uitest::opens_with_no_folder has been running for over 60 seconds` at 01:17:55 and was cancelled at the job's 30-minute limit at 01:32:39. The rerun passed. Found by the `ci-apt-mirror-timeout` scan of rerun and failed CI runs (plan: `docs/plans/_archived/20261127-ci-apt-mirror-timeout/plan.md`); how to read such a job is in `docs/agents/github-actions-workflows.md` ("A job that hits its timeout"). Files: `crates/app/src/uitest.rs`.
+Run 45091844682 attempt 1, `app (ubuntu-latest)` (job 137424185183, 2026-11-23, cold cache), logged `test uitest::opens_with_no_folder has been running for over 60 seconds` at 01:17:55 and was cancelled at the job's 30-minute limit at 01:32:39. The rerun passed. Found by the `ci-apt-mirror-timeout` scan of rerun and failed CI runs (plan: `docs/plans/_archived/20261127-ci-apt-mirror-timeout/plan.md`); how to read such a job is in `docs/agents/github-actions-workflows.md` ("A job that hits its timeout"). The UI test harness now has a watchdog: a harness phase past 60 s writes `UI test watchdog: phase ...` with that test's log lines to stderr and aborts the test binary. What was ruled out (the bounded waits of the harness and the quit handlers) and the unbounded `join`s still to suspect are in the plan, `docs/plans/_archived/20261128-uitest-watchdog/plan.md` ("Trade-offs and risks"). Files: `crates/app/src/uitest.rs`.
 
 #### TODO
 
-- [ ] Find why `uitest::opens_with_no_folder` can hang. Done when the hang is reproduced or its cause found from the test's code, and fixed, or a per-test bound added so it fails fast.
+- [ ] When the watchdog next fires in CI, read the phase and the log lines from the job log, find the cause and fix it. Done when the cause is fixed.
 
 ### Core: re-measure the import copy pipeline against Explorer on a fast destination
 

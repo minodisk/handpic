@@ -3436,6 +3436,31 @@ after about 11 ms, one retry) and fails the test if it is still held after
 10 s; nothing is written outside it. The smoke test passed 25 runs alone and
 20 runs of the whole crate's tests on Windows.
 
+Each `Ui` also runs a watchdog thread (`Watchdog`) from `open_with` to the
+end of its drop, `cx`'s own drop included (the field declared last). The
+harness sets its phase at each stage of the open, in `wait_until` and
+`update`, at the quit, the folder removal and the context's drop, and on
+return from those calls to `test body, after ...`. A phase older than
+`PHASE_MAX` (60 s) writes the phase, its time and the `Ui`'s log lines with
+`std::io::stderr().write_all` (libtest's capture is lost on an abort) and
+calls `std::process::abort()`, so a hang inside a GPUI call or on a lock
+ends the test binary in about a minute and names where it stopped, instead
+of the CI job's 30-minute limit with no output.
+
+The watchdog's `on_fire` receives only the phase line (`watchdog_report`,
+pure in the label, the elapsed time and the limit). The production closure
+(`abort_with`) writes and flushes that line first and only then calls
+`log_lines`, which takes the `LOG` mutex, so the phase still reaches stderr
+when the hung thread holds that lock. `Ui::read` and direct `ui.cx` calls are
+not instrumented: a hang inside one is reported as
+`test body, after <last phase>`.
+
+- Rule: do not treat a `the quit handlers took` 1.5 s to 4.0 s failure
+  against `QUIT_MAX` in `ci:local`'s whole-crate parallel run on a shared
+  host as a regression of the quit path. It flaked before the watchdog, and
+  the UI tests alone and a rerun passed. Run the UI tests alone first. See
+  [the watchdog's learnings](../plans/_archived/20261128-uitest-watchdog/learnings.md).
+
 - Rule: build a UI test on `Ui`, wait on the app's threads with
   `wait_until`, never a fixed sleep, and drop the `Ui` to end it.
 - Rule: a UI test that times out is diagnosed from its log lines, not by

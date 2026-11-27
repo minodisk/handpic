@@ -718,7 +718,9 @@ test-only `src/uitest.rs` both call (`Ui`, the view opened on GPUI's
 `TestAppContext` over a temporary index and settings store, GPUI's
 `test-support` coming from a `gpui-pre-platform` dev-dependency;
 `wait_until`, a bounded real-time wait for the app's own threads; its drop
-quitting the app and removing the folder, and the UI tests).
+quitting the app and removing the folder; its watchdog thread, which writes
+the harness phase that ran past `PHASE_MAX` with its log lines to stderr and
+aborts, and the UI tests).
 
 At the repository root, `install.sh` (POSIX sh, shellchecked by
 `mise run lint`) and `install.ps1` are the one-line installers the docs lead

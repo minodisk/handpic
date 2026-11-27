@@ -176,7 +176,9 @@ Linux GPUI dependencies", now carries its own `timeout-minutes: 5`.
 
 A test step that logs `has been running for over 60 seconds` names a hung
 test instead, as run 45091844682's attempt 1 did for
-`uitest::opens_with_no_folder` before the job limit cancelled it.
+`uitest::opens_with_no_folder` before the job limit cancelled it. A UI test
+now aborts the test binary after 60 s in one harness phase with the
+watchdog's `UI test watchdog: phase ...` report, which names the phase.
 
 - Rule: on a timed-out job, read the attempt's step durations first. An apt
   step whose log ends in a low `Fetched ... (NN kB/s)` is the runner's
