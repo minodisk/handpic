@@ -120,3 +120,5 @@ scratchpad's `results.md`, the source of truth for every edit.
 - `todo.md` is edited by other sessions; the edits are confined to the range and re-read after each rebase.
 
 ## Progress
+
+- 2026-11-27: Step 1 done (results.md, learnings.md, todo.md: five items removed and two narrowed, docs/agents/app.md and shared-crates.md)
