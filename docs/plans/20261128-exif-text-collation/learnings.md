@@ -13,8 +13,9 @@
 - `icu_normalizer` with `default-features = false, features = ["compiled_data"]`
   resolved offline from the existing lock: the `Cargo.lock` diff is the one
   `"icu_normalizer"` line in `handpic-app`'s dependencies, no `[[package]]`.
-- `char::to_lowercase` yielding several chars (`İ`) weighs as its first
-  lowercase char for the primary; the tertiary compares the whole lowercase
-  to the char, as the JS prototype's `toLowerCase` did.
+- After NFD no char lowercases to several (U+0130 `İ` decomposes into `I` and
+  a combining dot), so the first lowercase char is the whole lowercase; the
+  tertiary compares the lowercase to the char, as the JS prototype's
+  `toLowerCase` did.
 - In Git Bash on this host a bare `python3` hangs (the Store stub), as
   `CLAUDE.md` warns; use `mise x -- python`.

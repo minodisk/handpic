@@ -178,7 +178,8 @@ fn text_key(text: &str) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
             );
             continue;
         }
-        // A char whose lowercase is several chars (`İ`) weighs as its first.
+        // After NFD no char lowercases to several (U+0130 decomposes), so the
+        // first is the whole lowercase.
         let lower = c.to_lowercase().next().unwrap_or(c);
         primary.push(
             PRIMARY

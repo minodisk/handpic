@@ -67,7 +67,10 @@ the `icu_collator` crate and its collation data, and closes the todo item.
       - `24-70mm F2.8 DG DN | Art 019` before `24-70mm F2.8 DG DN II | Art 024`
     - The existing tests of the module (among them
       `exif_key_orders_camera_and_lens_by_their_text` and
-      `groups_come_in_menu_order_each_sorted`) pass unchanged.
+      `groups_come_in_menu_order_each_sorted`) pass unchanged, except the
+      case-tie test `text_ties_in_case_fall_back_to_the_plain_compare`, renamed
+      and changed on purpose to expect `["a", "b", "B"]` because
+      lowercase-first is `localeCompare`'s order.
     - `crates/app/Cargo.toml` has `icu_normalizer` as a direct dependency and
       the diff of `crates/app/Cargo.lock` adds no `[[package]]` entry (only
       `icu_normalizer` in `handpic-app`'s dependency list).
@@ -153,3 +156,8 @@ the `icu_collator` crate and its collation data, and closes the todo item.
   `utf8_iter` (already in the lock) and accepting new packages, and records it.
 
 ## Progress
+
+- 2026-11-28: Step 1 landed. The filter's Camera and Lens items follow ICU
+  root collation (`crates/app/src/exif.rs`, `icu_normalizer` as a direct
+  dependency). The one case-tie test changed on purpose (see its Done-when).
+  PR: the `fix/exif-text-collation` branch.
