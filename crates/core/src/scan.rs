@@ -317,6 +317,8 @@ fn cue_and_gate(
             let scored = rgb
                 .as_ref()
                 .and_then(|rgb| score_rgb(rgb, Some(at), frame, &[]));
+            // Free the full-size buffer before the gate search's own decode.
+            drop(rgb);
             yield_to_pause(cancel);
             if canceled(cancel) {
                 return None;

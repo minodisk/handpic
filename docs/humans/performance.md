@@ -972,7 +972,7 @@ A file with a trusted AF point decodes its preview once in the second pass
 since `FACES_VERSION` 17: the sharpness score, with the same AF point and
 eye-AF frame, takes the BT.601 luma of the cue's full-size RGB decode instead
 of a grayscale decode of its own, and a file whose RGB decode fails still
-scores through that decode. On 2026-11-28 (Windows 11, i7-13700, release,
+scores on a grayscale decode of its own, as before. On 2026-11-28 (Windows 11, i7-13700, release,
 one thread, warm), over the 282 trusted-AF 1616x1080 ARW previews of
 `2026-09-19`, the grayscale decode and window took a median 6.4ms and the
 full-frame luma and window that replace it 3.1ms, a median saving of 3.2ms
