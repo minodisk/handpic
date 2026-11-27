@@ -320,9 +320,16 @@ needed for a different reason than `mise run git:main`: it deletes the
 `could not lock config file ...: Operation not permitted` (measured;
 deterministic, not probabilistic).
 
-If either of these fails, return `FAILED` (reason: `post_merge_sync_failed`),
-stating explicitly that **the merge and post-merge succeeded** (so the caller
-does not misread it as "the merge failed").
+If either of these fails, re-run that command once: the same command exactly as
+written in its code block, as its own Bash call, with
+`dangerouslyDisableSandbox: true` again, so it still matches the allow rule.
+Measured across past runs: the only two failures were transient
+(`cannot lock ref refs/remotes/origin/main`, a fetch race, and
+`delete_merged_branches.sh` exiting 1 with `branch ... not found`), and both
+passed on a re-run of the same command. If the re-run fails too, return
+`FAILED` (reason: `post_merge_sync_failed`), stating explicitly that **the
+merge and post-merge succeeded** (so the caller does not misread it as "the
+merge failed").
 
 ## Output
 
