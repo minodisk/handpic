@@ -11,6 +11,30 @@
 
 - [ ] Check in `crates/app/src/settingsview.rs` which line draws a refused capture key's refusal, and correct the rule in `docs/agents/app.md`'s keymap section to match.
 
+### Core: the AF path's sharpness luma covers the whole frame though the score reads only its window
+
+#### Background
+
+af-luma-reuse (`FACES_VERSION` 17) scores a file with a trusted AF point on the luma of the cue's RGB decode. The measurement (`docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, "Saving per file") showed the full-frame `candidate::luma` takes a median 3.1 ms of the 6.4 ms grayscale decode it replaced on a 1616x1080 ARW preview, and much more on a 4416x2944 RAF preview. `sharpness::laplacian_variance` reads only the window's pixels, so a luma of just the score's window (paths 0 and 1, and path 2's eye window) would give bit-identical scores. That needs no ranking check and no `FACES_VERSION` bump, and saves about 3 ms more per ARW file.
+
+Files: `crates/core/src/scan.rs` (`score_rgb`), `crates/core/src/sharpness.rs` (`score_gray`, `window_at`), `crates/core/src/candidate.rs` (`luma`).
+
+#### TODO
+
+- [ ] Compute the luma over the score's window only, check the scores are bit-identical to the full-frame luma on a handful of files (ARW and one larger preview), and update the docs that quote the saving, including one sentence in the `FACES_VERSION` 13/17 paragraph of `docs/agents/shared-crates.md` saying the luma is windowed.
+
+### Core: the luma-reuse score's ranking on non-Sony AF bursts is unchecked
+
+#### Background
+
+`FACES_VERSION` 17 (af-luma-reuse) applies the luma reuse to every file with a trusted AF point: RAF, CR3, NEF, ORF and DNG as well as ARW. Only Sony bursts were measured, because plan Trade-offs 2 decided (a) to decide on Sony alone (`docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, "Limits"). The luma-vs-Y score difference on a RAF preview was the largest measured earlier (GX680, 1.1%).
+
+Files: `docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, `crates/core/src/scan.rs`.
+
+#### TODO
+
+- [ ] When real bursts of another make are on the host, run `lumascore.patch`'s subcommand (in `docs/plans/_archived/20261128-af-luma-reuse/`) and `burst_spearman.py one` on them, and record the within-burst Spearman and the top-frame share. If the ranking holds, update the "other makes' AF bursts were not checked" sentence in `docs/agents/shared-crates.md`; if it breaks, restrict the reuse by make and bump `FACES_VERSION`.
+
 ### App: confirm the split-deferred-open test fails without its fix
 
 #### Background
@@ -147,16 +171,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
 Related: `crates/core/src/sharpness.rs`, `crates/core/src/faces.rs`, `crates/core/src/arw.rs`, `crates/engine/src/index.rs`, `crates/app/src/burst.rs`.
 
 ---
-
-### Core: a file with a trusted AF point still decodes its preview twice in pass 2
-
-#### Background
-
-`todo-four-closeouts` Step 3 made a faced no-AF file score from the cue's RGB decode (`FACES_VERSION` 13), but left the files with a trusted AF point alone: they still decode the preview twice (full-size RGB for the cue's crop, grayscale for the score). Reusing the RGB's luma would save a grayscale decode (about 4-5 ms on a 1616x1080 ARW preview) per file. On ARW, CR3, NEF, RAF and ORF previews the BT.601 luma of the RGB differs from mozjpeg's Y channel on about half the pixels (score 0.1-1.1% off), so it needs its own ranking check on Sony bursts and a `FACES_VERSION` bump. Plan: `docs/plans/_archived/20261123-todo-four-closeouts/plan.md`, luma-vs-Y check in `no-af-decode.md` beside it. Files: `crates/core/src/scan.rs` (`cue`, `score`), `crates/core/src/candidate.rs` (`focus_cue_unless`), `crates/core/src/sharpness.rs` (`score_gray`).
-
-#### TODO
-
-- [ ] Measure the saving and the within-burst Spearman of the luma-reuse score on real Sony bursts with a trusted AF point (`handpic-cli features`, `burst_spearman.py` from the plan folder), and adopt it with a `FACES_VERSION` bump only if the ranking holds, otherwise record "measured, not adopted".
 
 ### Core: the review of the closed-eyes labels is still open
 

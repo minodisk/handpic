@@ -100,9 +100,11 @@ treat the numbers as rough:
 | Pass 2 (`handpic-cli features <dir> 1`, `analysis_ms`), mean / p50 / p95 | 299.0 / 294.4 / 393.7ms | 140.1 / 116.5 / 227.1ms |
 
 All 20 RAFs had an AF point, so none searched the whole image for faces.
-Pass 2 still decodes the 4416x2944 preview in full twice: once in RGB for the
-face cue (about 74ms) and once in grayscale for the sharpness score (about
-50ms). A mozjpeg DCT-scaled decode of those previews is not faster (means,
+When this was measured, pass 2 decoded the 4416x2944 preview in full twice:
+once in RGB for the face cue (about 74ms) and once in grayscale for the
+sharpness score (about 50ms). Since `FACES_VERSION` 17 the score takes the
+BT.601 luma of the cue's RGB decode instead, so the grayscale decode is gone
+(see "Which pass carries which cost"; the RAF saving was not re-timed). A mozjpeg DCT-scaled decode of those previews is not faster (means,
 n=20, the second of two decodes of each file):
 
 | Scale | Grayscale | RGB |
@@ -963,7 +965,7 @@ focus candidate cue and the sharpness score:
 | Cost | Pass before | Pass now |
 |------|-------------|----------|
 | Bounded read, metadata parse, thumbnail | first | first |
-| Sharpness score (grayscale decode + window, ~3ms) | first | second |
+| Sharpness score (BT.601 luma of the cue's RGB decode + window, ~3ms on a 1616x1080 ARW preview; a grayscale decode + window, ~6ms, when the cue made no RGB decode) | first | second |
 | Whole-preview face search without a trusted AF point (~17ms at 320x320; ~64ms at 640x448 on Windows, after a 3/8 decode of ~5ms instead of the full-size ~14ms) | first | second |
 | Focus candidate cue (crop detection + face mesh eye regions, eye window fallback) | second | second |
 | HDR PQ CR3 HEVC decode (65-125ms) | up to three times per file | twice per file (thumbnail, analysis) |
@@ -977,9 +979,22 @@ takes instead of a grayscale decode of its own (`FACES_VERSION` 13). On
 runs each), `handpic-cli features <dir> 1` put the median `analysis_ms` of
 those files at 286.6 -> 245.2ms on `2026-02-01` (72 files) and 226.5 ->
 211.3ms on `2026-09-05` (204 files), a median saving of 13.4 and 16.2ms per
-file; on those Leica M11-P DNGs the score did not change at all. Every other
-file is scored as before. See
+file; on those Leica M11-P DNGs the score did not change at all. See
 `docs/plans/_archived/20261123-todo-four-closeouts/no-af-decode.md`.
+
+A file with a trusted AF point decodes its preview once in the second pass
+since `FACES_VERSION` 17: the sharpness score, with the same AF point and
+eye-AF frame, takes the BT.601 luma of the cue's full-size RGB decode instead
+of a grayscale decode of its own, and a file whose RGB decode fails still
+scores on a grayscale decode of its own, as before. On 2026-11-28 (Windows 11, i7-13700, release,
+one thread, warm), over the 282 trusted-AF 1616x1080 ARW previews of
+`2026-09-19`, the grayscale decode and window took a median 6.4ms and the
+full-frame luma and window that replace it 3.1ms, a median saving of 3.2ms
+per file (3.0ms on a second pass). The score moved by a median 1.4% (the
+luma reading higher), and the within-burst order not at all (Spearman 1.000
+in all 50 bursts, the same top frame in each). A file with no trusted AF
+point and no confident face still scores on a grayscale decode, as before.
+See `docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`.
 
 The first pass writes the rows in small batches (10) as their thumbnails finish, so the
 thumbnails appear at the speed of the read and the thumbnail encode, and the

@@ -8,7 +8,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::allfaces::{self, FaceCounts, Measured, Reading, MAX_FACES};
-use crate::arw::{Arw, FocusLocation, Shot};
+use crate::arw::{Arw, FocusFrame, FocusLocation, Shot};
 use crate::candidate::{face_cue_unless, focus_cue_rgb_unless, luma, Cue};
 use crate::decode::{decode_rgb, thumbnail_jpeg_near};
 use crate::eyes::judged_face;
@@ -162,8 +162,10 @@ fn extract_unless(
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Analysis {
     pub cue: Cue,
-    /// `sharpness::score_preview` of the preview; `None` when it could not be
-    /// scored, which does not fail the file, and always for a JPEG file.
+    /// The `sharpness` score of the preview: `sharpness::score_gray` on the
+    /// luma of the cue's RGB decode when the cue made one, else
+    /// `sharpness::score_preview`'s own grayscale decode; `None` when it could
+    /// not be scored, which does not fail the file, and always for a JPEG file.
     pub sharpness: Option<f64>,
     /// `fullsharp::full_eye_sharpnesses` of the judged face's two eyes on the
     /// full JPEG (the value `full_eye_sharpness` gives); `None` when the cue judged no face or its mesh was turned down
@@ -185,8 +187,9 @@ pub struct Analysis {
 /// nearest the AF point, the face mesh (`candidate::focus_cue_rgb_unless` on
 /// the decode pass 2 keeps);
 /// without a trusted AF point, on the largest confident face of the whole
-/// preview (`eyes::judged_face`, `candidate::face_cue_unless`), whose
-/// full-size RGB decode the sharpness score then takes its luma from. Only
+/// preview (`eyes::judged_face`, `candidate::face_cue_unless`). Either way the
+/// sharpness score takes its luma from the cue's full-size RGB decode, and
+/// decodes the preview to grayscale itself only when the cue made none. Only
 /// an unreadable file is `Err`; a decode, detection or scoring failure, or a
 /// panic in any of them, is an unknown cue or no score; a mesh failure leaves
 /// the face its YuNet eye landmarks, a mesh `eyes::mesh_trusted` turns down
@@ -269,7 +272,9 @@ fn extract_analysis_unless(
         Err(e) => return Some(Err(e.to_string())),
     };
     let focus = trusted_focus(&arw.shot);
-    let (cue, faces, gate_count, scored) = cue_and_gate(&preview, arw.orientation, focus, cancel)?;
+    let frame = eye_af_frame(&arw.shot).map(|(_, frame)| frame);
+    let (cue, faces, gate_count, scored) =
+        cue_and_gate(&preview, arw.orientation, focus, frame, cancel)?;
     if canceled(cancel) {
         return None;
     }
@@ -289,30 +294,37 @@ fn extract_analysis_unless(
 /// gate count and the score taken on the cue's decode.
 type CueAndGate = (Cue, Vec<Face>, Option<u32>, Option<f64>);
 
-/// Pass 2's cue of `preview`, the faces its score falls back to and its gate
-/// count. With the AF point `focus` the cue's detection runs around it, the
-/// score needs no faces and the gate count takes a `faces::GATE_INPUT` search
-/// of its own (`af_gate_count`); without one the faces are searched for on
-/// the whole image at `faces::WHOLE_INPUT`, the cue judges the largest
-/// confident one, the score falls back to them and the gate counts over
-/// them from the same floor as the AF path (`whole_gate_count`), taken on the
-/// cue's decode when it made one (`score_rgb`), the fourth
-/// value. `None` once `cancel` abandoned the file.
+/// Pass 2's cue of `preview`, the faces its score falls back to, its gate
+/// count and its score taken on the cue's decode when it made one
+/// (`score_rgb`), the fourth value. With the AF point `focus` the cue's
+/// detection runs around it, the score needs no faces and is taken around
+/// `focus` with the eye-AF `frame`, and the gate count takes a
+/// `faces::GATE_INPUT` search of its own (`af_gate_count`); without one the
+/// faces are searched for on the whole image at `faces::WHOLE_INPUT`, the cue
+/// judges the largest confident one, the score falls back to them and the
+/// gate counts over them from the same floor as the AF path
+/// (`whole_gate_count`). `None` once `cancel` abandoned the file.
 fn cue_and_gate(
     preview: &[u8],
     orientation: u16,
     focus: Option<FocusLocation>,
+    frame: Option<FocusFrame>,
     cancel: &AtomicBool,
 ) -> Option<CueAndGate> {
     match focus {
         Some(at) => {
-            let (cue, _) = af_cue(preview, orientation, at, cancel)?;
+            let (cue, rgb) = af_cue(preview, orientation, at, cancel)?;
+            let scored = rgb
+                .as_ref()
+                .and_then(|rgb| score_rgb(rgb, Some(at), frame, &[]));
+            // Free the full-size buffer before the gate search's own decode.
+            drop(rgb);
             yield_to_pause(cancel);
             if canceled(cancel) {
                 return None;
             }
             let gate = af_gate_count(preview, orientation, &cue);
-            Some((cue, Vec::new(), gate, None))
+            Some((cue, Vec::new(), gate, scored))
         }
         None => {
             let detection = whole_image_detection(preview, orientation);
@@ -324,7 +336,9 @@ fn cue_and_gate(
             let (cue, rgb) = whole_image_cue_rgb(preview, orientation, detection, cancel)?;
             let gate = faces.as_ref().map(|f| whole_gate_count(f, &cue));
             let faces = faces.unwrap_or_default();
-            let scored = rgb.as_ref().and_then(|rgb| score_rgb(rgb, &faces));
+            let scored = rgb
+                .as_ref()
+                .and_then(|rgb| score_rgb(rgb, None, None, &faces));
             Some((cue, faces, gate, scored))
         }
     }
@@ -464,16 +478,22 @@ fn extract_face_counts_unless(
 /// A preview decoded to stored RGB: the pixels, the width and the height.
 type Rgb = (Vec<u8>, usize, usize);
 
-/// The no-AF-point score of `faces` (`sharpness::score_gray`) on the luma of
-/// `rgb`; a failure or panic is no score.
-fn score_rgb((pixels, width, height): &Rgb, faces: &[Face]) -> Option<f64> {
+/// The score (`sharpness::score_gray`) of the AF point `focus` with its
+/// eye-AF `frame`, else of `faces`, on the luma of `rgb`; a failure or panic
+/// is no score.
+fn score_rgb(
+    (pixels, width, height): &Rgb,
+    focus: Option<FocusLocation>,
+    frame: Option<FocusFrame>,
+    faces: &[Face],
+) -> Option<f64> {
     catch_unwind(AssertUnwindSafe(|| {
         score_gray(
             &luma(pixels, *width, *height),
             *width,
             *height,
-            None,
-            None,
+            focus,
+            frame,
             faces,
         )
     }))
@@ -674,7 +694,8 @@ fn whole_image_cue_rgb(
     Some((cue, Some(rgb)))
 }
 
-/// `score_preview` of `preview`; a failure or panic is no score.
+/// `score_preview` of `preview`, for a file whose cue made no RGB decode to
+/// score on; a failure or panic is no score.
 fn score(preview: &[u8], shot: &Shot, focus: Option<FocusLocation>, faces: &[Face]) -> Option<f64> {
     let eye_af = eye_af_frame(shot);
     catch_unwind(AssertUnwindSafe(|| {
@@ -1914,7 +1935,7 @@ mod tests {
             x: 3000,
             y: 2000,
         };
-        let (got, runs, meshes) = runs_of(|| cue_and_gate(&preview, 1, Some(focus), &never));
+        let (got, runs, meshes) = runs_of(|| cue_and_gate(&preview, 1, Some(focus), None, &never));
         let (cue, faces, gate, _) = got.unwrap();
         assert_eq!(
             (runs, meshes),
@@ -1939,21 +1960,65 @@ mod tests {
             "a failed search is unknown"
         );
         assert_eq!(
-            cue_and_gate(&preview, 1, Some(focus), &AtomicBool::new(true)),
+            cue_and_gate(&preview, 1, Some(focus), None, &AtomicBool::new(true)),
             None
+        );
+    }
+
+    #[test]
+    fn an_af_frame_is_scored_on_the_luma_of_the_cue_decode() {
+        let never = AtomicBool::new(false);
+        let (w, h) = (640, 480);
+        let pattern: Vec<u8> = (0..w * h)
+            .flat_map(|i| {
+                let v = ((i % w) * 7 + (i / w) * 13) as u8;
+                [v, v / 2, 255 - v]
+            })
+            .collect();
+        let mut c = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_RGB);
+        c.set_size(w, h);
+        c.set_quality(80.0);
+        let mut c = c.start_compress(Vec::new()).unwrap();
+        c.write_scanlines(&pattern).unwrap();
+        let preview = c.finish().unwrap();
+        let focus = FocusLocation {
+            sensor_w: 6000,
+            sensor_h: 4000,
+            x: 2000,
+            y: 1500,
+        };
+        let (rgb, rw, rh) = decode_rgb(&preview).unwrap();
+        let gray = luma(&rgb, rw, rh);
+        let frame = FocusFrame {
+            width: 300,
+            height: 300,
+        };
+        for frame in [None, Some(frame)] {
+            let (_, _, _, scored) = cue_and_gate(&preview, 1, Some(focus), frame, &never).unwrap();
+            assert_eq!(
+                scored,
+                Some(score_gray(&gray, rw, rh, Some(focus), frame, &[]).unwrap()),
+                "{frame:?}"
+            );
+        }
+        let (_, _, _, scored) =
+            cue_and_gate(b"not a jpeg", 1, Some(focus), Some(frame), &never).unwrap();
+        assert_eq!(
+            scored, None,
+            "no decode leaves the score to score_preview's own decode"
         );
     }
 
     #[test]
     fn without_an_af_point_the_gate_counts_over_the_whole_image_search() {
         let never = AtomicBool::new(false);
-        let (got, runs, _) = runs_of(|| cue_and_gate(&jpeg(640, 480), 1, None, &never));
+        let (got, runs, _) = runs_of(|| cue_and_gate(&jpeg(640, 480), 1, None, None, &never));
         assert_eq!(runs, (0, 1, 0), "no search of its own");
         assert_eq!(
             got.map(|(cue, _, gate, _)| (cue.face, gate)),
             Some((None, Some(0)))
         );
-        let (got, runs, _) = runs_of(|| cue_and_gate(b"not a jpeg", 1, None, &never));
+        let (got, runs, _) = runs_of(|| cue_and_gate(b"not a jpeg", 1, None, None, &never));
         assert_eq!(runs, (0, 0, 0));
         assert_eq!(
             got.map(|(_, _, gate, _)| gate),
@@ -2614,7 +2679,7 @@ mod tests {
         let (pixels, w, h) = &rgb;
         let expected = score_gray(&luma(pixels, *w, *h), *w, *h, None, None, &faces).unwrap();
         assert_eq!(
-            score_rgb(&rgb, &faces),
+            score_rgb(&rgb, None, None, &faces),
             Some(expected),
             "scored on the cue's decode"
         );
