@@ -67,9 +67,9 @@ printf 'Source: handpic\n\nPackage: handpic\nArchitecture: amd64\n' >"${shlibs}/
 depends="$(cd "${shlibs}" && dpkg-shlibdeps -O "-e${debroot}/usr/lib/handpic/${binary}")"
 depends="${depends#shlibs:Depends=}"
 # GPUI opens these at run time, so they are not among the binary's NEEDED:
-# wgpu's Vulkan loader (libvulkan.so.1) and the Wayland client library
-# (wayland-backend's dlopen). wgpu's GL fallback (libEGL) is left out.
-for package in libvulkan1 libwayland-client0; do
+# wgpu's Vulkan loader (libvulkan.so.1), its GL fallback's libEGL.so.1 and
+# the Wayland client library (wayland-backend's dlopen).
+for package in libvulkan1 libegl1 libwayland-client0; do
 	if [[ ! "${depends}" =~ (^|, )${package}([ ,]|$) ]]; then
 		depends="${depends}, ${package}"
 	fi

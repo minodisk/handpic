@@ -380,7 +380,9 @@ Per Zed's `script/linux`: `libfontconfig-dev`, `libwayland-dev`,
 `libx11-xcb-dev`, `libxkbcommon-x11-dev`, `libvulkan1`, plus a Vulkan-capable
 driver at run time. The `app` CI job's Linux leg installs exactly these.
 At run time wgpu falls back to GL through `libEGL.so.1` when no Vulkan
-adapter is found (see the deb's `Depends` rule under "Packaging").
+adapter is found, so the deb depends on `libegl1` as well as `libvulkan1`
+(see the deb's `Depends` rule under "Packaging"; not measured on a
+Vulkan-less machine).
 Since the switch to `gpui-kit` the X11 and Wayland backends are compiled (its
 `x11` and `wayland` features); before, neither was.
 macOS needs the Xcode CLT (Metal), Windows only MSVC.
@@ -857,14 +859,25 @@ packages the built `target/release` binary with a script under
   Vulkan nor Wayland is linked: wgpu (Vulkan and GL backends,
   `gpui-pre-wgpu`) loads `libvulkan.so.1`, or `libEGL.so.1` for GL, and
   GPUI's `wayland-backend` (`client_system`, `dlopen`) loads
-  `libwayland-client.so.0`. `linux.sh` therefore adds `libvulkan1` and
-  `libwayland-client0` by hand; the GL fallback's `libegl1` is left out.
+  `libwayland-client.so.0`. `linux.sh` therefore adds `libvulkan1`, the GL
+  fallback's `libegl1` and `libwayland-client0` by hand. `libegl1` is a
+  plain dependency, not `libvulkan1 | libegl1`: the Vulkan loader alone
+  gives no adapter on a machine without a Vulkan driver, where wgpu's GL
+  fallback then opens `libEGL.so.1`, and the alternative form would let
+  `libvulkan1` alone satisfy it. `libegl1` is small and on every desktop.
+  Not measured on a Vulkan-less machine.
   The deb and the tarball need glibc 2.39 or later (Ubuntu 24.04, Debian
   13); an older distribution needs an older build image.
 - Rule: the deb's `Package` is `handpic`. The Tauri v1.10.0 deb was
   `Package: riffle` (read from `Riffle_1.10.0_amd64.deb`), so the app deb
-  does not upgrade it in place; `Conflicts` / `Replaces` against `riffle` is
-  left to sub-milestone 4's real-device check.
+  does not upgrade it in place, and the control has no `Conflicts` /
+  `Replaces` against `riffle`. Handpic and Riffle are separate products
+  with their own package names, binaries and install paths
+  (`/usr/lib/handpic`), so the two debs install side by side, as Riffle
+  1.10.0 and Handpic 2.1.0 do on Windows (two uninstall entries, seen on
+  2026-11-27); a `Replaces` / `Conflicts` would also make apt remove a
+  Riffle the user may still want. Decided from the packaging, without a
+  real-device deb check.
 - Rule: the one desktop entry is the checked-in
   `dev.minodisk.handpic.desktop` with the bare `Exec=handpic`
   (`datadir.rs` tests it, and `app:install:linux` installs it as is); the

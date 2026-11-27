@@ -998,19 +998,9 @@ Files: `mise.toml`, `tools/package/macos.sh`, `tools/package/windows.sh`, `tools
 - [ ] On Windows, install Inno Setup 6 (`winget install JRSoftware.InnoSetup`), then run `mise run app:package:windows`. Expect `crates/app/target/release/Handpic-0.0.0-windows-x64-setup.exe` and `Handpic-0.0.0-windows-x64.zip`. As a standard (non-admin) user, run the setup. Expect no UAC prompt, the app under `%LOCALAPPDATA%\Programs\Handpic`, and a Start menu entry `Handpic` that starts it. Run the setup again silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and expect no prompt. Uninstall from Settings, Apps.
   - Not run on the 2026-11-27 host: it installs Inno Setup and a per-user Handpic under `%LOCALAPPDATA%\Programs\Handpic`, where the host's own Handpic install lives.
 - [ ] On Linux x86_64 with `dpkg-dev` and the GPUI apt list installed, run `mise run app:package:linux`. Expect `crates/app/target/release/Handpic-0.0.0-linux-x64.tar.gz`, `install.sh` and `handpic_0.0.0_amd64.deb`. Run `sh install.sh <tarball> <its sha256sum>`, then start Handpic from the desktop menu on a Wayland and an X11 session. Expect the window to show the Handpic icon (matched by `dev.minodisk.handpic`). Install the deb with `sudo apt install ./handpic_0.0.0_amd64.deb`, start it from the menu, and remove it with `sudo apt remove handpic`. If a machine without a Vulkan driver is at hand, check that the app still starts (wgpu's GL fallback through `libEGL`).
+- [ ] On Linux, with a Riffle deb already installed (`dpkg -l riffle`), run `sudo apt install ./handpic_<version>_amd64.deb`. Expect apt to keep Riffle installed (no removal, no `Replaces` / `Conflicts` prompt, no file overwrite), both launchable, and `dpkg -s handpic` to show `libegl1` in `Depends`. (No `Conflicts` / `Replaces: riffle` was decided from the packaging alone in `docs/plans/_archived/20261127-deb-libegl1-no-replaces/plan.md`.)
 - [ ] On a Mac with macOS 15 or later, download the latest release's `Handpic-<version>-macos-arm64.dmg` with a browser, drag `Handpic.app` to `/Applications` and open it. Expect Gatekeeper to block it, and System Settings, Privacy & Security, Open Anyway to let it start, as `README.md` / `docs/humans/usage.md` "Installing" (and their Japanese pairs) say.
 - [ ] On Linux, run the `install.sh` command of the usage guide against a release's `SHA256SUMS`. Expect `~/.local/bin/handpic` to start from the desktop menu.
-
-### App: decide the Linux deb's `Conflicts` / `Replaces: riffle` and whether it depends on `libegl1`
-
-The app deb is `Package: handpic`. The shipped Tauri deb (v1.10.0) is `Package: riffle`, so both can be installed side by side, and the app deb does not upgrade it in place. The removed Tauri app's `tauri.conf.json` on `main` had `linux.deb.replaces` / `conflicts` `["riffle"]`, never released. Separately, `tools/package/linux.sh` adds `libvulkan1` and `libwayland-client0` to `dpkg-shlibdeps`'s result but not `libegl1`, which wgpu's GL fallback opens when no Vulkan adapter is found. A desktop normally has it, but a machine without Vulkan would need it. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md` ("The deb does not upgrade a Riffle deb in place" risk and Step 3's `Depends` measurement).
-
-Files: `crates/app/packaging/linux/control`, `tools/package/linux.sh`.
-
-#### TODO
-
-- [ ] Decide whether `control` gets `Conflicts` / `Replaces: riffle`, after the real-device deb check above. Done when the choice is in the template or `app.md` records why not.
-- [ ] Decide whether `Depends` gets `libegl1`, or `libvulkan1 | libegl1`, after the Vulkan-less machine check. Done when `linux.sh` reflects the choice or the guide records why not.
 
 ### App: real-device checks of the title bar's smaller text and centered folder name (native-title-bar-folder-name)
 
