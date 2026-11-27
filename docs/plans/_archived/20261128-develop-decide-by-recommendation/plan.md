@@ -192,3 +192,5 @@ develop does routinely.
   approval; out of scope, a todo candidate.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete
