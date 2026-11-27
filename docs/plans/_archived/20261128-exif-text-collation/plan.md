@@ -161,3 +161,4 @@ the `icu_collator` crate and its collation data, and closes the todo item.
   root collation (`crates/app/src/exif.rs`, `icu_normalizer` as a direct
   dependency). The one case-tie test changed on purpose (see its Done-when).
   PR: the `fix/exif-text-collation` branch.
+- (2026-11-28) Step 1 complete
