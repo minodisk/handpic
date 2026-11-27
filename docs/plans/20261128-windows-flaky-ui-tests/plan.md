@@ -12,7 +12,7 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 </pr-rules>
 </plan-guide>
 
-# File the three Windows UI tests that failed once on a docs-only PR (windows-flaky-ui-tests)
+# File the three Windows `crates/app` tests that failed once on a docs-only PR (windows-flaky-ui-tests)
 
 ## Purpose
 
@@ -31,20 +31,19 @@ is investigated. Docs only: one step, one PR (single-PR mode).
 
 ## Steps
 
-- [x] Step 1: Add a `todo.md` item for the three flaky Windows UI tests
+- [x] Step 1: Add a `todo.md` item for the three flaky Windows `crates/app` tests
   - Done when:
     - `todo.md` holds, under `## Cross-cutting / other`, a new item
-      `### App: three Windows UI tests failed once and passed on a re-run (folderops, judgment)`
+      ``### App: three Windows `crates/app` tests failed once and passed on a re-run (folderops, judgment)``
       with a `#### Background` (the three test names, the run and job ids,
       that the PR was docs only and the re-run passed, that the log expired so
       the panic is unknown, the files `crates/app/src/folderops.rs`,
-      `crates/app/src/judgment.rs`, `crates/app/src/uitest.rs`) and a
+      `crates/app/src/judgment.rs`, `crates/app/src/uitest.rs`, `crates/engine/src/sidecar.rs`; that the judgment test is not a UI test) and a
       `#### TODO` with boxes: (1) when one of them fails again on CI, save the
       job log (`gh api repos/minodisk/handpic/actions/jobs/<id>/logs`) before
-      it expires and record the panic and the phase `uitest.rs`'s watchdog
-      reports; (2) read each test's waits (`wait_until` bounds, the judgment
-      writer's debounce against the quit drain) for a timing assumption a
-      loaded Windows runner can break, and fix it or widen the bound, without
+      it expires and record the panic and, for the two `folderops` tests, the phase `uitest.rs`'s watchdog
+      reports; (2) read each test's waits (the `folderops` tests' `wait_until` bounds; the judgment test's `DRAIN_TIMEOUT` (2 s) against `DEBOUNCE`)
+      for a timing assumption a loaded Windows runner can break, and fix it or widen the bound, without
       running the tests in a local loop (CLAUDE.md forbids load tests on the
       host).
     - The item notes that the first test is also the subject of the existing
@@ -53,3 +52,5 @@ is investigated. Docs only: one step, one PR (single-PR mode).
   - Implementation approach: edit `todo.md` by anchoring on `## Cross-cutting / other`; insert the item right after that heading line, keeping one blank line between items. Rebase on `origin/main` first; `todo.md` is edited by other sessions.
 
 ## Progress
+
+- 2026-11-28: Step 1 done (todo.md item under Cross-cutting / other; docs only, the PR's GitHub checks verify)

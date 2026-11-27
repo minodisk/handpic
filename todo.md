@@ -1,16 +1,16 @@
 # todo
 
 ## Cross-cutting / other
-### App: three Windows UI tests failed once and passed on a re-run (folderops, judgment)
+### App: three Windows `crates/app` tests failed once and passed on a re-run (folderops, judgment)
 
 #### Background
 
-On PR #1336, which changed only docs, the first attempt of the `app (windows-latest)` job of run 46020887142 (job 140579952371) failed on three `crates/app` tests, and a re-run of the failed job passed with no change: `folderops::tests::a_held_click_on_a_folder_a_split_removed_opens_the_first_date_folder`, `folderops::tests::a_click_on_a_folder_under_a_rename_in_flight_is_refused` and `judgment::tests::the_quit_drain_writes_a_key_inside_the_debounce`. The failing attempt's job log has expired, so the panic messages are unknown; the test names come from the PR's `pr-check-fixer` report. The first test is also the subject of the item `### App: confirm the split-deferred-open test fails without its fix` below. Plan: `docs/plans/_archived/20261128-windows-flaky-ui-tests/plan.md`. Files: `crates/app/src/folderops.rs`, `crates/app/src/judgment.rs`, `crates/app/src/uitest.rs`.
+On PR #1336, which changed only docs, the first attempt of the `app (windows-latest)` job of run 46020887142 (job 140579952371) failed on three `crates/app` tests, and a re-run of the failed job passed with no change: `folderops::tests::a_held_click_on_a_folder_a_split_removed_opens_the_first_date_folder`, `folderops::tests::a_click_on_a_folder_under_a_rename_in_flight_is_refused` and `judgment::tests::the_quit_drain_writes_a_key_inside_the_debounce`. The first two are UI tests; the third opens no `Ui` and is a sidecar writer test bounded by `folder.writer.flush(DRAIN_TIMEOUT)`, the engine's 2 s `sidecar::DRAIN_TIMEOUT`, against `sidecar::DEBOUNCE`. The failing attempt's job log has expired, so the panic messages are unknown; the test names come from the PR's `pr-check-fixer` report. The first test is also the subject of the item `### App: confirm the split-deferred-open test fails without its fix` below. Plan: `docs/plans/_archived/20261128-windows-flaky-ui-tests/plan.md`. Files: `crates/app/src/folderops.rs`, `crates/app/src/judgment.rs`, `crates/app/src/uitest.rs`, `crates/engine/src/sidecar.rs`.
 
 #### TODO
 
-- [ ] When one of them fails again on CI, save the job log (`gh api repos/minodisk/handpic/actions/jobs/<id>/logs`) before it expires, and record the panic and the phase `uitest.rs`'s watchdog reports.
-- [ ] Read each test's waits (the `wait_until` bounds, the judgment writer's debounce against the quit drain) for a timing assumption a loaded Windows runner can break, and fix it or widen the bound, without running the tests in a local loop (CLAUDE.md forbids load tests on the host).
+- [ ] When one of them fails again on CI, save the job log (`gh api repos/minodisk/handpic/actions/jobs/<id>/logs`) before it expires, and record the panic and, for the two `folderops` tests, the phase `uitest.rs`'s watchdog reports.
+- [ ] Read each test's waits (the `folderops` tests' `wait_until` bounds; the judgment test's `DRAIN_TIMEOUT` (2 s) against `DEBOUNCE`) for a timing assumption a loaded Windows runner can break, and fix it or widen the bound, without running the tests in a local loop (CLAUDE.md forbids load tests on the host).
 
 ### App: the keymap capture refusal is drawn in the settings body, but app.md says the status line
 
