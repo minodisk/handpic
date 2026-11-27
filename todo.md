@@ -1380,3 +1380,13 @@ The agent-run-device-checks work (plan: `docs/plans/_archived/20261127-agent-run
 #### TODO
 
 - [ ] Make `planner.md` ask a plan to name, for each hands-on Done-when line, the input kind (agent-runnable or user-only) and the material, consistent with the wrap-up's reason list in `SKILL.md` 3.3 and `implementer.md` step 6.
+
+### App: the eyes supersede rule is stale in `CLAUDE.md` and in the `eyes.rs` comments
+
+#### Background
+
+`CLAUDE.md`'s `src/eyes.rs` description says "so a newer request or a clear supersedes the running judgment", and the doc comments of `EyesTicket` and `EyesCache::current` in `crates/app/src/eyes.rs` say the same. `EyesCache::request` issues no ticket while a judgment is in flight, so only a `clear` supersedes a running one. Seen on Windows 11 on 2026-11-27: 60 `navigate next` 8 ms apart logged three `eyes` lines (results in `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`). The section "An on-demand judgment is superseded through a shared atomic" of `docs/agents/app.md` was already corrected; `CLAUDE.md` and the code comments were not, because the plan changed docs and todo only. Files: `CLAUDE.md`, `crates/app/src/eyes.rs`.
+
+#### TODO
+
+- [ ] Reword the `src/eyes.rs` description in `CLAUDE.md` and the doc comments of `EyesTicket` and `EyesCache::current` so that while a judgment runs only a `clear` supersedes it, and a newer request's id only follows a settle or a clear.

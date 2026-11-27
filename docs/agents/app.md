@@ -3848,8 +3848,11 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
 - Rule: MCP plus the `screenshot` tool (an app built with `mise run
   app:dev:screenshot`) closes the checks that need only an open, a navigation,
   a setting, a confirmed run or a left click. It cannot close a key press (Tab
-  or Escape in a dialog, `Ctrl+Z`, a held `→`), the IME, a drag, a
-  right-click, a HiDPI display or macOS / Linux. A run confirmed through MCP
+  or Escape in a dialog, `Ctrl+Z`, a held `→`), a `present` /
+  `keypressToPixels` percentile (only a real key press prints a `page` line;
+  MCP `navigate` prints none, though one MCP session can page faster than key
+  repeat), the IME, a drag, a right-click, a menu's click, a Ctrl-click, a
+  HiDPI display or macOS / Linux. A run confirmed through MCP
   with `mcpAllowDestructive` opens no dialog, so the dialog's keys and
   dimmed buttons stay open too. Colors, legibility and text size still need
   the user's eye on the running window.
