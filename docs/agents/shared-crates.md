@@ -410,6 +410,11 @@ recorded run list it twice. Both entries belong to `a.ARW`, the first match by
 path, and only `a.ARW` is cleared. Do not "fix" the duplicate without changing
 that pinned behavior. Source:
 `docs/plans/_archived/20261126-chunked-sidecar-delete/learnings.md`, Step 1.
+Measured in the app on Windows 11 on 2026-11-27: 300 `.xmp` moved in about
+1.6 s, 5-7 ms a file against about 140 ms a file one sidecar per operation;
+the undo restored them in 2759 ms and the redo moved them again in 2075 ms,
+through the MCP `undo` / `redo` tools
+(`docs/plans/_archived/20261127-windows-device-checks-c7/results.md`).
 
 ### A bulk sidecar rewrite must skip what `reconcile_of` skips (Hit)
 
