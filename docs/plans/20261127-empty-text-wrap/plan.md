@@ -54,7 +54,7 @@ Decisions already made (record them and their reasons in the PR body):
 
 ## Steps
 
-- [ ] Step 1: Wrap the empty-state text inside the preview, with a UI test
+- [x] Step 1: Wrap the empty-state text inside the preview, with a UI test
       and the rule in `docs/agents/app.md`
   - Done when:
     - With `panelWidths` `{"left":480,"right":480}`, a 1200 px wide window
@@ -159,3 +159,5 @@ Decisions already made (record them and their reasons in the PR body):
   element's layout, its test and its doc.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete
