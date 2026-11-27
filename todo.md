@@ -11,6 +11,30 @@
 
 - [ ] Check in `crates/app/src/settingsview.rs` which line draws a refused capture key's refusal, and correct the rule in `docs/agents/app.md`'s keymap section to match.
 
+### Core: the AF path's sharpness luma covers the whole frame though the score reads only its window
+
+#### Background
+
+af-luma-reuse (`FACES_VERSION` 17) scores a file with a trusted AF point on the luma of the cue's RGB decode. The measurement (`docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, "Saving per file") showed the full-frame `candidate::luma` takes a median 3.1 ms of the 6.4 ms grayscale decode it replaced on a 1616x1080 ARW preview, and much more on a 4416x2944 RAF preview. `sharpness::laplacian_variance` reads only the window's pixels, so a luma of just the score's window (paths 0 and 1, and path 2's eye window) would give bit-identical scores. That needs no ranking check and no `FACES_VERSION` bump, and saves about 3 ms more per ARW file.
+
+Files: `crates/core/src/scan.rs` (`score_rgb`), `crates/core/src/sharpness.rs` (`score_gray`, `window_at`), `crates/core/src/candidate.rs` (`luma`).
+
+#### TODO
+
+- [ ] Compute the luma over the score's window only, check the scores are bit-identical to the full-frame luma on a handful of files (ARW and one larger preview), and update the docs that quote the saving, including one sentence in the `FACES_VERSION` 13/17 paragraph of `docs/agents/shared-crates.md` saying the luma is windowed.
+
+### Core: the luma-reuse score's ranking on non-Sony AF bursts is unchecked
+
+#### Background
+
+`FACES_VERSION` 17 (af-luma-reuse) applies the luma reuse to every file with a trusted AF point: RAF, CR3, NEF, ORF and DNG as well as ARW. Only Sony bursts were measured, because plan Trade-offs 2 decided (a) to decide on Sony alone (`docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, "Limits"). The luma-vs-Y score difference on a RAF preview was the largest measured earlier (GX680, 1.1%).
+
+Files: `docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, `crates/core/src/scan.rs`.
+
+#### TODO
+
+- [ ] When real bursts of another make are on the host, run `lumascore.patch`'s subcommand (in `docs/plans/_archived/20261128-af-luma-reuse/`) and `burst_spearman.py one` on them, and record the within-burst Spearman and the top-frame share. If the ranking holds, update the "other makes' AF bursts were not checked" sentence in `docs/agents/shared-crates.md`; if it breaks, restrict the reuse by make and bump `FACES_VERSION`.
+
 ### App: confirm the split-deferred-open test fails without its fix
 
 #### Background

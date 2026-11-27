@@ -278,3 +278,5 @@ Rules for the step:
    constraints.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete
