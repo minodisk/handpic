@@ -6,6 +6,7 @@
 use std::cmp::Ordering;
 
 use handpic_engine::exif::Exif;
+use icu_normalizer::DecomposingNormalizerBorrowed;
 
 /// One EXIF section of the filter menu, in the menu's order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -119,8 +120,8 @@ impl Groups {
 
 /// The groups of the folder's files' EXIF, in the index's order: when two
 /// files share a label with different orders, the last one's order counts.
-/// Numbers sort by value, ties by label; text case-insensitively, ties by the
-/// plain compare.
+/// Numbers sort by value, ties by label; text like ICU root collation
+/// (`text_key`), ties by the plain compare.
 pub fn groups_of<'a>(exifs: impl IntoIterator<Item = Option<&'a Exif>>) -> Groups {
     let exifs: Vec<&Exif> = exifs.into_iter().flatten().collect();
     let mut groups = Vec::new();
@@ -147,13 +148,47 @@ pub fn groups_of<'a>(exifs: impl IntoIterator<Item = Option<&'a Exif>>) -> Group
 fn compare(a: &Key, b: &Key) -> Ordering {
     match (&a.order, &b.order) {
         (Order::Number(x), Order::Number(y)) => x.total_cmp(y).then_with(|| a.label.cmp(&b.label)),
-        (Order::Text(x), Order::Text(y)) => x
-            .to_lowercase()
-            .cmp(&y.to_lowercase())
-            .then_with(|| x.cmp(y)),
+        (Order::Text(x), Order::Text(y)) => text_key(x).cmp(&text_key(y)).then_with(|| x.cmp(y)),
         (Order::Number(_), Order::Text(_)) => Ordering::Less,
         (Order::Text(_), Order::Number(_)) => Ordering::Greater,
     }
+}
+
+/// ICU root collation's order of printable ASCII, lowercase.
+const PRIMARY: &str = " _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789abcdefghijklmnopqrstuvwxyz";
+/// ICU root collation's order of the common combining accents.
+const ACCENTS: [char; 13] = [
+    '\u{301}', '\u{300}', '\u{306}', '\u{302}', '\u{30C}', '\u{30A}', '\u{308}', '\u{30B}',
+    '\u{303}', '\u{307}', '\u{327}', '\u{328}', '\u{304}',
+];
+
+/// An approximation of ICU root collation (`localeCompare`), not a collator:
+/// the NFD string's primary, secondary (accent) and tertiary (case, lowercase
+/// first) weights, each level compared as a whole sequence.
+fn text_key(text: &str) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+    let nfd = DecomposingNormalizerBorrowed::new_nfd().normalize(text);
+    let (mut primary, mut secondary, mut tertiary) = (Vec::new(), Vec::new(), Vec::new());
+    for c in nfd.chars() {
+        if ('\u{300}'..='\u{36F}').contains(&c) {
+            secondary.push(
+                ACCENTS
+                    .iter()
+                    .position(|&a| a == c)
+                    .map_or(0x100 + c as u32, |i| i as u32 + 1),
+            );
+            continue;
+        }
+        // A char whose lowercase is several chars (`İ`) weighs as its first.
+        let lower = c.to_lowercase().next().unwrap_or(c);
+        primary.push(
+            PRIMARY
+                .find(lower)
+                .map_or(0x10000 + lower as u32, |i| i as u32),
+        );
+        secondary.push(0);
+        tertiary.push(u32::from(c.to_lowercase().ne([c])));
+    }
+    (primary, secondary, tertiary)
 }
 
 #[cfg(test)]
@@ -322,10 +357,56 @@ mod tests {
     }
 
     #[test]
-    fn text_ties_in_case_fall_back_to_the_plain_compare() {
+    fn text_differing_in_case_puts_lowercase_first() {
         let exifs = [shot("b", 1., "1"), shot("B", 1., "1"), shot("a", 1., "1")];
         let groups = groups_of(exifs.iter().map(Some));
-        assert_eq!(groups.labels(Group::Camera), strings(&["a", "B", "b"]));
+        assert_eq!(groups.labels(Group::Camera), strings(&["a", "b", "B"]));
+    }
+
+    /// `want`, `localeCompare`'s order, sorted from its reverse and a shuffle.
+    fn assert_text_order(want: &[&str]) {
+        let n = want.len();
+        let reversed: Vec<&str> = want.iter().rev().copied().collect();
+        let shuffled: Vec<&str> = (0..n).map(|i| want[(i * 7 + 3) % n]).collect();
+        for given in [reversed, shuffled] {
+            let mut keys: Vec<Key> = given
+                .iter()
+                .map(|t| Key {
+                    label: t.to_string(),
+                    order: Order::Text(t.to_string()),
+                })
+                .collect();
+            keys.sort_by(compare);
+            let got: Vec<&str> = keys.iter().map(|k| k.label.as_str()).collect();
+            assert_eq!(got, want, "from {given:?}");
+        }
+    }
+
+    #[test]
+    fn text_orders_punctuation_like_icu_root() {
+        assert_text_order(&[
+            "a b", "a_b", "a-b", "a:b", "a.b", "a(b", "a)b", "a/b", "a&b", "a+b", "a|b", "a1",
+            "ab", "aB", "Ab", "AB",
+        ]);
+    }
+
+    #[test]
+    fn text_orders_accents_after_the_base_letter_like_icu_root() {
+        assert_text_order(&["e", "E", "é", "É", "è", "ê", "ë", "f"]);
+        assert_text_order(&["resume", "Resume", "résume", "résumé"]);
+    }
+
+    #[test]
+    fn text_orders_model_suffixes_like_icu_root() {
+        assert_text_order(&["Z5", "Z5 II", "Z5_2", "Z50", "Z50_2", "Z5II"]);
+        assert_text_order(&[
+            "NIKON CORPORATION NIKON Z5_2",
+            "NIKON CORPORATION NIKON Z50_2",
+        ]);
+        assert_text_order(&[
+            "24-70mm F2.8 DG DN | Art 019",
+            "24-70mm F2.8 DG DN II | Art 024",
+        ]);
     }
 
     #[test]

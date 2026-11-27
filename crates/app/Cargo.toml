@@ -18,6 +18,7 @@ gpui-kit = "=0.9.1"
 gpui-pre-platform = { version = "=0.3.12", optional = true, features = ["test-support"] }
 handpic-core = { path = "../core" }
 handpic-engine = { path = "../engine" }
+icu_normalizer = { version = "2", default-features = false, features = ["compiled_data"] }
 mozjpeg = "0.10"
 natord = "1"
 dirs = "6"
