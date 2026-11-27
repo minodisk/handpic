@@ -50,3 +50,30 @@
   `docs/agents/app.md`. The step's checkbox was ticked on the automated
   criteria only. Basis: the plan's Step 1; files `crates/app/src/main.rs`,
   `crates/app/src/modal.rs`, `docs/agents/app.md`, `todo.md`.
+
+## Wrap-up real-device check
+
+- The check passed on Windows 11 under both the trash dialog and the
+  `Delete Sidecars…` dialog: minimize, maximize, the bar drag and close all
+  worked, the bar undimmed, and the dialog kept its focus (Tab still moved
+  the outline, Enter on `Cancel` and Escape still closed it). Results in
+  `results.md`.
+- Real-pointer `mouse_event` on the window controls (`SetCursorPos`, three
+  relative moves, press, release) reached the non-client hit test every
+  time; the drag worked with 40 relative moves 20 ms apart between press and
+  release. Posted client clicks were used only for the menus and the
+  presses below the bar.
+- To test Enter without confirming a destructive run: Tab to `Cancel`,
+  then Enter. The dialog opens with the destructive button focused.
+- Holding the `.ui-lock` across several tool calls worked through a separate
+  hidden PowerShell process that opens it with `FileShare.None` and waits for
+  a release file; each tool call is its own process, so a handle opened in
+  one call would close at its end.
+- `select_photos` wants the open folder's spelling of a path, here the
+  verbatim `\?\D:\...` form `get_view` reports; plain `D:\...` was refused
+  as not shown.
+- Comparing two MCP screenshots (with and without the dialog) is the
+  cleanest "undimmed" test: zero differing pixels in the bar's rows. A
+  desktop capture adds the window's 1 px DWM top border, which differs.
+- The cold debug build with `-j 2` took about 30 minutes and was not killed
+  for memory.

@@ -319,6 +319,22 @@ sizes, the empty state's `0.9rem`); 13 px would have shrunk them all. Its
   view and a `deferred` keeps its parent dispatch node, what
   `RootPlugin::prepare` / `style` set (the rem above all), and runs the A/B
   gate, since the wrapper is drawn every frame.
+- Measured (2026-11-28 on Windows 11, `results.md` of the plan below): the title
+  bar's wrapper (`TitleBar` plus the folder-name overlay) is passed whole to
+  `deferred(..)` at the default priority 0, so it is drawn above the component
+  dialog layer and the minimize, maximize, close and drag controls stay
+  usable while a confirmation dialog is open. `modal::backdrop` is absolute
+  against `main`, which starts at the window's top, so it takes
+  `top(TITLE_BAR_HEIGHT)` to line up with the settings layer and leave the
+  bar undimmed. With the gear reachable under a dialog, `open_settings`
+  refuses while `clear.asking()`. That is the one case where a dialog is open
+  and the settings are closed: an MCP `clear_cache` without
+  `mcpAllowDestructive` opens the cache confirmation through `press_clear`.
+  Any new bar control, or a new dialog that opens without the settings, needs
+  the same check. The `#[cfg(test)]` probe is `Handpic::bar_presses`. Tests:
+  `the_title_bar_lies_above_the_trash_dialog_and_keeps_its_focus` and
+  `the_settings_do_not_open_under_the_cache_confirmation`. Source:
+  `docs/plans/_archived/20261128-title-bar-over-dialogs/learnings.md`, Step 1.
 
 ### The license notices are due at packaging (Inferred)
 
@@ -4491,9 +4507,13 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   layering through a `#[cfg(test)]` left mouse-down probe on the wrapper
   (`Handpic::bar_presses`): GPUI's test window never calls the window-control
   hit test and leaves `start_window_move`, `minimize` and `zoom`
-  `unimplemented!()`, so the test clicks without a move. Inferred from the
-  source and the test until the real-device check in the plan
-  `docs/plans/20261128-title-bar-over-dialogs/plan.md`.
+  `unimplemented!()`, so the test clicks without a move. Measured on
+  2026-11-28 on Windows 11 (debug, `screenshot` feature, real-pointer input):
+  under the trash and `Delete Sidecars…` dialogs, minimize, maximize, the
+  bar's drag and close worked, the bar was pixel-identical to the no-dialog
+  frame while the rest was dimmed, a press below the bar did nothing, and
+  Tab / Enter / Escape still acted on the dialog
+  (`docs/plans/_archived/20261128-title-bar-over-dialogs/results.md`).
 
 ### Text is typed through gpui-component's `Input` (Inferred)
 

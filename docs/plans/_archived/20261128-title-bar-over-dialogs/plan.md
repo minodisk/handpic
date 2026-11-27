@@ -217,3 +217,5 @@ the settings under any dialog, and the UI test uses a `#[cfg(test)]` probe.
   and were likely never blocked; the drag was.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete
