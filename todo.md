@@ -183,10 +183,6 @@ Files: `docs/plans/_archived/20261007-head-pose/pose-truth.md`, `docs/plans/_arc
 
 #### TODO
 
-- [ ] Also check hand check 16 of `docs/plans/_archived/20261008-burst-keep-score/results.md`
-      (`D:\photos\2026\2026-07-05\_DSC2445.ARW`): a profile looking up behind a ball
-      reads pitch -68 deg. Decide whether `crates/core/src/pose.rs` should call that
-      unknown or whether the label stands.
 - [ ] On Windows, open the sheets `D:\Photos\tests\2026-10-07-head-pose\sheets\s00.png` to `s16.png` (4 tiles across, row by row in the `#` order of the `pose-truth.md` table; crops in `crops\`) and compare each tile to its row. Note any label to change. If labels change, re-run `aggregate.py` (in `D:\Photos\tests\2026-10-07-head-pose\`) and update `pose-results.md` and the plan's Decision if a number moves.
 
 ### Agents: confirm `pr-runner` waits for a review-round child's hand-back on a real `/pr` run
@@ -1159,15 +1155,3 @@ Files: `crates/core/src/scan.rs` (`other_faces`, `whole_image_cue_rgb`).
 #### TODO
 
 - [ ] Decide whether the CLI's `allfaces` should answer `0 0 0` again on a frame with no judged face (for example by not treating a candidate as needing pixels there), or whether `- - -` is the intended answer, and document it.
-
-### Core: the time cost of pass 3's 0.6 floor is unmeasured on an idle host (candidates-floor)
-
-#### Background
-
-The candidates-floor measurement ran each build once on a shared host. The "before" means were 3 to 4 times the documented ones and single files moved by hundreds of ms either way, so no time delta could be quoted. The cost is estimated from the added mesh count (3.0 per gate frame on the Leica groups, 0.46 on the team sport) at about 44 ms per mesh from the stage profile. Plan: `docs/plans/_archived/20261128-candidates-floor/plan.md`.
-
-Files: `docs/humans/performance.md`, `docs/humans/performance.ja.md`.
-
-#### TODO
-
-- [ ] On an idle host, with the user's go-ahead for repeated runs, alternate the before and after builds as `docs/humans/performance.md` does (`handpic-cli allfaces <files> 1`, fastest of three) on `2026-02-01` and the first 300 ARW of `2026-11-07`, and add the measured per-file times to the "All-faces check (Windows 11)" section of both languages.

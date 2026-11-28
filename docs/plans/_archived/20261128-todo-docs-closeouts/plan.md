@@ -83,6 +83,11 @@ Taken by the main agent without asking (develop § Deciding without asking):
 4. The `/merge` flowchart's "needs approval" edge in the develop README is fixed in the same pass: it is the same stale stop, and leaving it keeps the README contradicting itself.
 5. The two comment-only `.rs` edits stay in this one PR, as the request asks; a flaky Windows app test is re-run if it fails.
 
+Added later at the delegating session's request (the user's decisions):
+
+6. Hand check 16 of `docs/plans/_archived/20261008-burst-keep-score/results.md` (`_DSC2445.ARW`, pitch -68 deg) is closed: the label stands and `crates/core/src/pose.rs` is not changed. If the face really looks up, -68 deg is right, and either way |-68| exceeds `GOOD_MAX_PITCH` (45 deg, `crates/engine/src/index.rs`), so the frame is out of the good-photo mark. Its box under `### Core: the review of the head-pose labels is still open` is deleted; the sheet review box stays.
+7. `### Core: the time cost of pass 3's 0.6 floor is unmeasured on an idle host (candidates-floor)` is deleted whole: a todo that only waits for a future event (an idle host) is not kept.
+
 ## Trade-offs and risks
 
 - **Comment-only `.rs` edits pull the app crate into the checks.** `mise run ci:local` and the PR run the `crates/app` clippy, tests and three-platform jobs, where the known flaky Windows tests can need a re-run.
@@ -90,4 +95,4 @@ Taken by the main agent without asking (develop § Deciding without asking):
 
 ## Progress
 
-- 2026-11-28: Step 1 landed (stale todo.md items deleted, the documentation-only corrections and the two comment-only `.rs` edits made); local review round 1 addressed and `ci:local` run before the fix commit; PR checks pending.
+- (2026-11-28) Step 1 complete
