@@ -1335,14 +1335,7 @@ impl Handpic {
             .as_deref()
             .is_some_and(|open| trash::opens_target(open, &[canonical], IGNORE_CASE));
         let first = split.moved.first().filter(|_| split.removed);
-        let gone = split.removed
-            && self
-                .deferred_open
-                .take_if(|folder| {
-                    tree::relation(&folder.to_string_lossy(), &dir, IGNORE_CASE).is_some()
-                })
-                .is_some();
-        if !gone && (self.deferred_open.is_some() || !opens) {
+        if self.deferred_open.is_some() || !opens {
             self.step_note = Some(status);
             self.settle_folder_run(cx);
         } else if !split.removed {
