@@ -21,5 +21,5 @@
 - The "loosen the approval judgment itself" mitigation of the `/goal` note was
   dropped with the stop it addressed: an ordinary flagged path no longer stops
   the run, and the release-shaping paths are not meant to be loosened.
-- A heredoc passed through the Bash tool turned `'\'` in a Python script into
-  `'\'`; a `lambda` replacement in `re.sub` sidestepped the escaping.
+- A heredoc passed through the Bash tool collapsed a doubled backslash in a
+  Python string literal to one; a `lambda` replacement in `re.sub` sidestepped the escaping.

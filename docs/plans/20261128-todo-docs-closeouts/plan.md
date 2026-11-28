@@ -89,3 +89,5 @@ Taken by the main agent without asking (develop § Deciding without asking):
 - **`cameras.ja.md` is a translation.** The rows and numbers can be checked mechanically; the replaced policy paragraph is new Japanese prose and its wording is the user's to review in the PR.
 
 ## Progress
+
+- 2026-11-28: Step 1 landed (stale todo.md items deleted, the documentation-only corrections and the two comment-only `.rs` edits made); local review round 1 addressed and `ci:local` run before the fix commit; PR checks pending.

@@ -388,8 +388,7 @@ impl SettingsView {
 
     /// A new threshold within the range is handed to the main view; a
     /// refused one shows its reason in the view's own line under the body.
-    /// The field shows the
-    /// threshold in force either way.
+    /// The field shows the threshold in force either way.
     fn commit_group(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         match settingsmodal::group_change(self.group_min_faces, text) {
             Ok(Some(n)) => {
