@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.3.0](https://github.com/minodisk/handpic/compare/v2.2.0...v2.3.0) (2026-11-28)
+
+
+### Features
+
+* **app:** show one task indicator per running task kind in the status row ([#1368](https://github.com/minodisk/handpic/issues/1368)) ([64c7436](https://github.com/minodisk/handpic/commit/64c74367428f4907ea678e506a42153cfc5ec658))
+
+
+### Bug Fixes
+
+* **app:** darken a rejected cell and the menu's Good green on light themes ([#1332](https://github.com/minodisk/handpic/issues/1332)) ([bb22531](https://github.com/minodisk/handpic/commit/bb2253193516e9846c1930414177b18bdbbaf4de))
+* **app:** depend on libegl1 in the Linux deb, no Replaces against riffle ([#1328](https://github.com/minodisk/handpic/issues/1328)) ([47a8ef6](https://github.com/minodisk/handpic/commit/47a8ef6455332446852c94948bcbb1a99994fa2b))
+* **app:** draw the strip marks over one dark copy, as the stars are ([#1333](https://github.com/minodisk/handpic/issues/1333)) ([0b9d330](https://github.com/minodisk/handpic/commit/0b9d3300aa98c49d51cd51736f22fa866697f3ea))
+* **app:** keep the focus on the right-click menu so its keys reach it ([#1350](https://github.com/minodisk/handpic/issues/1350)) ([83db74f](https://github.com/minodisk/handpic/commit/83db74f7ba09ddaa5dc4040b448c0d91468a064b))
+* **app:** keep the title bar usable while a confirmation dialog is open ([#1355](https://github.com/minodisk/handpic/issues/1355)) ([5101ef5](https://github.com/minodisk/handpic/commit/5101ef5a27310c5d834e51c42e88c7bdafa7f3f4))
+* **app:** map the Neutral switch tokens so an off switch reads clearly ([#1347](https://github.com/minodisk/handpic/issues/1347)) ([0703f2b](https://github.com/minodisk/handpic/commit/0703f2bfb1026a93408f82bc358c7df89c1cad79))
+* **app:** open the first date folder for a held click on a folder a split removed ([#1329](https://github.com/minodisk/handpic/issues/1329)) ([31c71d2](https://github.com/minodisk/handpic/commit/31c71d2220f4d9c39bf501ca8cc01fcad31a0df3))
+* **app:** order the filter's Camera and Lens items like ICU root collation ([#1357](https://github.com/minodisk/handpic/issues/1357)) ([01e3f5d](https://github.com/minodisk/handpic/commit/01e3f5d2ec2b682de92a3c613830ae560ddb8ed4))
+* **app:** wrap the preview's empty-state text within the preview ([#1339](https://github.com/minodisk/handpic/issues/1339)) ([97a656b](https://github.com/minodisk/handpic/commit/97a656be726740571625670424becae61d97f186))
+* **core:** judge pass 3's faces from 0.6, like the gate ([#1353](https://github.com/minodisk/handpic/issues/1353)) ([3a1753c](https://github.com/minodisk/handpic/commit/3a1753cec1686cc18bb406246248650ae5ac028b))
+* **core:** map a Nikon crop-mode AF point into the cropped JPEG ([#1351](https://github.com/minodisk/handpic/issues/1351)) ([0af00ee](https://github.com/minodisk/handpic/commit/0af00ee9dde992f8ba47e3e69a3dd652bd85b8b1))
+* **engine:** remove the Recycle Bin's $I file after an undo of Move to Trash ([#1348](https://github.com/minodisk/handpic/issues/1348)) ([c67a306](https://github.com/minodisk/handpic/commit/c67a30665ad0d4e6f629d57928567e8108bf7a21))
+* **engine:** report an ongoing burst of folder changes every maximum wait ([#1358](https://github.com/minodisk/handpic/issues/1358)) ([d42e16f](https://github.com/minodisk/handpic/commit/d42e16fa9c3832ec0ec00e772fc0c4301ebb0a12))
+* **skills:** keep Git Bash from rewriting /exit in the develop session end ([#1354](https://github.com/minodisk/handpic/issues/1354)) ([9e88000](https://github.com/minodisk/handpic/commit/9e880005f63eb892a233c660a40f16a9e324a7b3))
+
+
+### Performance Improvements
+
+* **core:** score a trusted-AF file on the luma of the cue's decode ([#1352](https://github.com/minodisk/handpic/issues/1352)) ([f14f009](https://github.com/minodisk/handpic/commit/f14f0094b4bd204b46a88da42784d5ecb6a9a00f))
+
 ## [2.2.0](https://github.com/minodisk/handpic/compare/v2.1.0...v2.2.0) (2026-11-27)
 
 
