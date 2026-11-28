@@ -140,15 +140,15 @@ pub fn tasks(sources: Sources) -> Vec<Task> {
             },
         });
     }
-    if sources.folder.is_none() {
-        if let Some(label) = sources.folder_uncounted {
-            tasks.push(Task {
-                kind: Kind::Folder,
-                label: label.to_owned(),
-                amount: Amount::Unknown,
-                tip: format!("{label}\u{2026}"),
-            });
-        }
+    if sources.folder.is_none()
+        && let Some(label) = sources.folder_uncounted
+    {
+        tasks.push(Task {
+            kind: Kind::Folder,
+            label: label.to_owned(),
+            amount: Amount::Unknown,
+            tip: format!("{label}\u{2026}"),
+        });
     }
     tasks.extend(held(Kind::Folder));
     if let Some((percent, text)) = sources.update {

@@ -140,7 +140,6 @@ impl Updates {
         }
     }
 
-    #[cfg(test)]
     pub fn phase(&self) -> &Phase {
         &self.phase
     }

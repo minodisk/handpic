@@ -843,9 +843,6 @@ fn a_rename_held_over_the_scan_runs_at_its_end_and_the_ring_fills_again() {
         fs::write(folder.join(name), dng(1)).unwrap();
     }
     let path = folder.to_string_lossy().into_owned();
-    // The scan's reads wait while this pause is held, so its task is there to
-    // be seen however fast the machine is.
-    let pause = ui.read(|view| view.slots.pause());
     let held = ui.update(|view, cx| {
         view.open_from_tree(path.clone(), cx).detach();
         view.request_rename(path, "renamed".into(), cx);
@@ -881,6 +878,9 @@ fn the_task_list_holds_the_scan_beside_a_held_rename_and_empties_at_the_end() {
         fs::write(folder.join(name), dng(1)).unwrap();
     }
     let path = folder.to_string_lossy().into_owned();
+    // The scan's reads wait while this pause is held, so its task is there to
+    // be seen however fast the machine is.
+    let pause = ui.read(|view| view.slots.pause());
     let held = ui.update(|view, cx| {
         view.open_from_tree(path.clone(), cx).detach();
         view.request_rename(path, "renamed".into(), cx);
