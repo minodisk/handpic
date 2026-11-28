@@ -58,3 +58,5 @@
   Edit tool, not `sed`, when the pattern holds `|`.
 - **Tripped up**: a `|` in a Markdown table cell (`` `|pitch|` ``) splits the
   cell, even in a code span; the reader's `table` escapes it as `\|`.
+
+- The archive move: a plain `mv` of the plan folder failed with "Device or resource busy" again (as in cue-labels); the files were copied into `_archived/` and the originals removed, and the `../_archived/` links in `plan.md` and `findings.md` were rewritten to `../`.

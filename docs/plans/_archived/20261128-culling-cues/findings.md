@@ -60,7 +60,7 @@ reading of `face away` against the picks, which found no lift.
 The 900 copies of the cue-labels round at
 `D:\Photos\tests\2026-11-28-cue-labels\` are kept, not deleted. The blind
 "OK to discard?" round stays possible: its pre-registration
-([cues.md](../_archived/20261128-cue-labels/cues.md)) is untouched and can
+([cues.md](../20261128-cue-labels/cues.md)) is untouched and can
 still be read if the user labels the round later.
 
 ## Caveats

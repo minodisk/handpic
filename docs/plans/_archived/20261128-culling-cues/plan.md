@@ -19,8 +19,8 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 
 ## Purpose
 
-The cue-labels plan ([plan](../_archived/20261128-cue-labels/plan.md),
-[pre-registration](../_archived/20261128-cue-labels/cues.md)) prepared a
+The cue-labels plan ([plan](../20261128-cue-labels/plan.md),
+[pre-registration](../20261128-cue-labels/cues.md)) prepared a
 900-frame blind "OK to discard?" round to give the cue readings (head pose,
 closed eyes and the rest) more power. The user decided on 2026-11-28 not to
 label it and to read the cues against their real culling instead: eight
@@ -91,7 +91,7 @@ were looked at. No bin was crossed with the label.
   keyed by `folder` and `file` with a `label` and an `inclusion_prob`
   column.
 - **Prior knowledge of rules against picks.** reject-filter-eval
-  ([reject.md](../_archived/20261016-reject-filter-eval/reject.md), "Rule
+  ([reject.md](../20261016-reject-filter-eval/reject.md), "Rule
   points", 25 folders) read `face away` (`|yaw|` > 35 or `|pitch|` > 45)
   as keeping 75.1% of the picks while removing 23.5% of the non-picks,
   `eyes closed` 92.8% / 11.3%, `eye focus low` 87.1% / 19.8% and
@@ -209,7 +209,7 @@ run of the reader that prints a reading.
     - **Standard library only** (`csv`, `random`, `os`, `hashlib`, `sys`).
       Re-implement `under`, `listing`, `write_listing`, `changed` and
       `read_tsv` after `sample.py` of the cue-labels plan
-      (`../_archived/20261128-cue-labels/sample.py`), naming the source in
+      (`../20261128-cue-labels/sample.py`), naming the source in
       a comment. Import nothing from `_archived/` and change nothing
       there.
     - Every data path is an argument; nothing depends on the script's own
