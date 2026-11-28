@@ -857,8 +857,9 @@ packages the built `target/release` binary with a script under
   good: Inno Setup finds the earlier install, its folder and its uninstall
   entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1`)
   by it, so a changed `AppId` installs a second copy instead of upgrading.
-- Rule: under Git Bash, `ISCC.exe`'s `/`-options need `MSYS_NO_PATHCONV=1`
-  (and `MSYS2_ARG_CONV_EXCL='*'`), or MSYS rewrites them as paths.
+- Rule: under Git Bash, run `ISCC.exe` with `MSYS_NO_PATHCONV=1` and
+  `MSYS2_ARG_CONV_EXCL='*'` for its `/`-options (the rule is in
+  [`CLAUDE.md`](../../CLAUDE.md)'s Development section).
 - Rule: the setup's two updater switches, read in its `[Code]`:
   `/WAITPID=<pid>` makes `InitializeSetup` wait (at most 60 s) for that
   process to exit before anything is installed, so the quitting app's exe is
@@ -2606,7 +2607,7 @@ not open.
   `Change`. Without a step, `apply_number_step` emits `NumberInputEvent::Step`,
   which the view takes (`settingsmodal::group_stepped`) and commits at once
   within the range. Commit on Enter / blur / step, and refuse an out-of-range
-  value in the status line.
+  value in the settings view's own line (`SettingsView::status`).
 - Rule: Enter and Space on a focused control come for free: the Base
   `Button` and `Radio` under the components are `div`s with `on_click`, which
   turn a key down then up of either into a `ClickEvent::Keyboard` (`div.rs`),
@@ -2882,11 +2883,13 @@ group. `Kbd::format` spells the
 key: `ctrl+alt+1` as `Ctrl+Alt+1` (`⌃⌥1` on macOS), `arrowleft` as `Left`
 (`←`), `shift+x` as `Shift+X`, `escape` as `Esc`, `meta+o` as `⌘O` on macOS;
 there is no option to keep the keymap's lowercase names. The empty state's
-sentence and the status line's refusals are text and keep the keymap's
+sentence and the settings' refusals are text and keep the keymap's
 spelling (`settingsmodal::display_key`), so the two spellings differ. The view
 edits its own copy of the keymap, read from the window on every open, through
 `settingsmodal::edit` (`Keymap::add` / `remove` / `reset` / `reset_all`); a
-refusal shows the engine's message on the status line and leaves the copy
+refusal shows the engine's message on the settings view's own line
+(`SettingsView::status`, drawn in red under the settings body; the settings
+layer covers the window's status line) and leaves the copy
 as it was, a success emits `Change::Keymap`, on which the window replaces
 `settings.keymap` and `bindings` (`Bindings::new`) and writes
 `Keymap::overrides()` under `shortcuts`, deleting the key when there are none
@@ -2947,7 +2950,7 @@ it clears `touched`, the undo histories and the step note, as the Tauri
 reopen (`openDirectory`) cleared `touched` and the judgment entries of its
 histories, and re-lists the open folder with `relist`, whose
 `sidecar::reconcile_of` runs only after the reset. A failure goes to the
-modal's status line (`SettingsView::failed`) and, as in the Tauri app, the
+settings view's own line (`SettingsView::failed`) and, as in the Tauri app, the
 folder is not re-listed.
 
 - Rule: a listing already under way when the format changes reconciles with
@@ -2991,7 +2994,7 @@ invalid one leaves the stored one and shows its reason.
   view entity lives as long as the window, so `Change::ImportRoot` is emitted
   and written whether or not the modal is still open. It sets only the root,
   so a pattern still being typed stays in the field. A dialog error (Linux)
-  goes to the status line.
+  goes to the settings view's own line (`SettingsView::failed`).
 - Not verified headless: the OS dialog, the typing and the buttons; the hand
   check is pending in `../plans/20261113-gpui-settings/learnings.md`.
   `Import…` itself is port Step 8's.

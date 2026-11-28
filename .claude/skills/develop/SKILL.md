@@ -1037,9 +1037,8 @@ work does not fit in one step, **do not quietly keep cramming it into one PR**:
    sleep 5; MSYS_NO_PATHCONV=1 herdr pane send-text "$HERDR_PANE_ID" "/exit"; herdr pane send-keys "$HERDR_PANE_ID" enter
    ```
 
-   so `/exit` lands once the turn is idle. Under Git Bash, `send-text` needs
-   `MSYS_NO_PATHCONV=1`, or MSYS rewrites the leading-slash `/exit` as a
-   Windows path and types `C:/Program Files/Git/exit` instead. The worktree stays for the
+   so `/exit` lands once the turn is idle. The `MSYS_NO_PATHCONV=1` on
+   `send-text` is `CLAUDE.md`'s Git Bash rule for a `/`-leading argument. The worktree stays for the
    `wrangle` skill's reap. Outside herdr, tell the user the session can be
    closed
 4. Do not use the `EndConversation` tool; it is not for finishing tasks
