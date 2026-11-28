@@ -1010,6 +1010,7 @@ fn the_strip_menu_takes_the_arrows_and_enter_and_hands_other_keys_on() {
         size: cells.size,
     };
     let b = ui.read(|view| view.files[1].to_string_lossy().into_owned());
+    let copied = crate::context::shown_path(&b);
 
     right_press(&mut ui, second, cell);
     assert_eq!(ui.current(), "b.dng");
@@ -1021,7 +1022,7 @@ fn the_strip_menu_takes_the_arrows_and_enter_and_hands_other_keys_on() {
     // back to the first (gpui-component's `select_up` / `select_down`), so
     // the highlight is on Select All; then the reveal item, then Copy Path.
     ui.cx.simulate_keystrokes("down enter");
-    assert_eq!(clipboard(&ui).as_deref(), Some(b.as_str()));
+    assert_eq!(clipboard(&ui).as_deref(), Some(copied.as_str()));
     assert!(view_has_keys(&mut ui));
 
     ui.cx
@@ -1029,7 +1030,7 @@ fn the_strip_menu_takes_the_arrows_and_enter_and_hands_other_keys_on() {
     right_press(&mut ui, second, cell);
     // Copy File Name, then back up to Copy Path.
     ui.cx.simulate_keystrokes("down down down down up enter");
-    assert_eq!(clipboard(&ui).as_deref(), Some(b.as_str()));
+    assert_eq!(clipboard(&ui).as_deref(), Some(copied.as_str()));
     assert!(view_has_keys(&mut ui));
 
     right_press(&mut ui, second, cell);

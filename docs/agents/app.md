@@ -5539,9 +5539,12 @@ it inside, as the Tauri `menuPosition`.
   `S_OK` without the prefix (measured from PowerShell, 2026-11-14), so the
   strip's reveal passes `context::shown_path` (`trash.ts`'s `shownPath`).
 - Rule: the copy items write the tree's spelling of the path and the row's
-  name, or the strip's targets' listed paths (prefix and all, as the Tauri
-  app wrote them) and file names, one per line, through
-  `cx.write_to_clipboard(ClipboardItem::new_string(..))`.
+  name, or the strip's targets' paths and file names, one per line, through
+  `cx.write_to_clipboard(ClipboardItem::new_string(..))`. The strip's paths
+  go through `context::shown_path` (`context::copied_paths`), so the
+  clipboard holds the tree's spelling: the Tauri app wrote the listed paths
+  with the verbatim `\\?\` prefix, which the shell and many other programs
+  refuse.
 - Tested: `uitest.rs`'s `the_strip_menu_takes_the_arrows_and_enter_and_hands_other_keys_on`
   and `the_tree_menu_takes_the_arrows_and_enter` right-press a strip cell
   and the tree's first row and pin the key routing with a menu open: the

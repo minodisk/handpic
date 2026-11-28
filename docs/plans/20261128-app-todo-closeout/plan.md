@@ -47,7 +47,7 @@ rest.
 
 ## Steps
 
-- [ ] Step 1: The strip's `Copy Path` copies paths without the Windows verbatim prefix
+- [x] Step 1: The strip's `Copy Path` copies paths without the Windows verbatim prefix
   - Done when:
     - The strip menu's `Copy Path` writes each target path through
       `context::shown_path`, one per line, so a `\\?\D:\...` listed path
