@@ -19,10 +19,10 @@
 //!    frame sharp anywhere ranks above one sharp nowhere.
 //!
 //! Only meaningful relative to other frames. `score_preview` decodes the
-//! preview to grayscale (the JPEG's Y channel); `score_gray` scores luma the
-//! caller already has, which the scan passes on paths 0, 1 and 2 from the
-//! BT.601 luma of the face cue's RGB decode (path 3 has no cue decode and
-//! decodes to grayscale), so those two inputs can differ slightly.
+//! preview to grayscale (the JPEG's Y channel); `region` gives the window (or
+//! the tiles) `score_gray` reads, and the scan computes the BT.601 luma of
+//! only that window of the face cue's RGB decode (path 3 has no cue decode
+//! and decodes to grayscale), so those two inputs can differ slightly.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -217,20 +217,42 @@ pub fn score_gray(
     frame: Option<FocusFrame>,
     faces: &[Face],
 ) -> Result<f64> {
+    Ok(match region(w, h, focus, frame, faces)? {
+        Region::Window(window) => laplacian_variance(gray, w, window),
+        Region::Tiles => tile_max(gray, w, h),
+    })
+}
+
+/// What `score_gray` reads of a `w` x `h` image: one window, or the tiles
+/// of `tile_max`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Region {
+    Window(Window),
+    Tiles,
+}
+
+/// The region `score_gray` scores for these arguments, along the four paths
+/// of the module doc; `Err` when the image has no interior pixel.
+pub fn region(
+    w: usize,
+    h: usize,
+    focus: Option<FocusLocation>,
+    frame: Option<FocusFrame>,
+    faces: &[Face],
+) -> Result<Region> {
     if w < 3 || h < 3 {
         bail!("a {w}x{h} preview has no interior pixel to score");
     }
     let point = focus.map(|f| focus_point(w, h, Some(f)));
     if let (Some(f), Some(frame), Some(p)) = (focus, frame, point) {
         let side = frame_side(frame, f.sensor_w, w);
-        return Ok(laplacian_variance(gray, w, window_at(w, h, p.0, p.1, side)));
+        return Ok(Region::Window(window_at(w, h, p.0, p.1, side)));
     }
-    let window = match (point, chosen_face(faces)) {
-        (Some(p), _) => window_at(w, h, p.0, p.1, WINDOW),
-        (None, Some(face)) => eye_window(w, h, face),
-        (None, None) => return Ok(tile_max(gray, w, h)),
-    };
-    Ok(laplacian_variance(gray, w, window))
+    Ok(match (point, chosen_face(faces)) {
+        (Some(p), _) => Region::Window(window_at(w, h, p.0, p.1, WINDOW)),
+        (None, Some(face)) => Region::Window(eye_window(w, h, face)),
+        (None, None) => Region::Tiles,
+    })
 }
 
 #[cfg(test)]

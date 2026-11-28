@@ -12,18 +12,6 @@ On PR #1336, which changed only docs, the first attempt of the `app (windows-lat
 - [ ] When one of them fails again on CI, save the job log (`gh api repos/minodisk/handpic/actions/jobs/<id>/logs`) before it expires, and record the panic and, for the two `folderops` tests, the phase `uitest.rs`'s watchdog reports.
 - [ ] Read each test's waits (the `folderops` tests' `wait_until` bounds; the judgment test's `DRAIN_TIMEOUT` (2 s) against `DEBOUNCE`) for a timing assumption a loaded Windows runner can break, and fix it or widen the bound, without running the tests in a local loop (CLAUDE.md forbids load tests on the host).
 
-### Core: the AF path's sharpness luma covers the whole frame though the score reads only its window
-
-#### Background
-
-af-luma-reuse (`FACES_VERSION` 17) scores a file with a trusted AF point on the luma of the cue's RGB decode. The measurement (`docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, "Saving per file") showed the full-frame `candidate::luma` takes a median 3.1 ms of the 6.4 ms grayscale decode it replaced on a 1616x1080 ARW preview, and much more on a 4416x2944 RAF preview. `sharpness::laplacian_variance` reads only the window's pixels, so a luma of just the score's window (paths 0 and 1, and path 2's eye window) would give bit-identical scores. That needs no ranking check and no `FACES_VERSION` bump, and saves about 3 ms more per ARW file.
-
-Files: `crates/core/src/scan.rs` (`score_rgb`), `crates/core/src/sharpness.rs` (`score_gray`, `window_at`), `crates/core/src/candidate.rs` (`luma`).
-
-#### TODO
-
-- [ ] Compute the luma over the score's window only, check the scores are bit-identical to the full-frame luma on a handful of files (ARW and one larger preview), and update the docs that quote the saving, including one sentence in the `FACES_VERSION` 13/17 paragraph of `docs/agents/shared-crates.md` saying the luma is windowed.
-
 ### Core: the luma-reuse score's ranking on non-Sony AF bursts is unchecked
 
 #### Background

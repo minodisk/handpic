@@ -737,7 +737,13 @@ retried.
   but the within-burst order did not (Spearman 1.000 in 50 of 50 bursts, the
   same top frame in each), saving a median 3.2 ms per 1616x1080 preview
   (`docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`); the other
-  makes' AF bursts were not checked. Before changing what that luma is
+  makes' AF bursts were not checked. That luma is computed over the
+  score's window only (the eye-AF window, the `WINDOW` window around the AF
+  point or the eye window; the tile fallback still takes the whole frame),
+  which leaves every score bit-identical, since `laplacian_variance` reads
+  nothing outside its window
+  (`docs/plans/_archived/20261128-core-analysis-closeouts/luma-window.md`).
+  Before changing what that luma is
   computed from, run a ranking check on real bursts and bump
   `FACES_VERSION`. A
   file with no face pays nothing, because `whole_image_cue` returns

@@ -965,7 +965,7 @@ focus candidate cue and the sharpness score:
 | Cost | Pass before | Pass now |
 |------|-------------|----------|
 | Bounded read, metadata parse, thumbnail | first | first |
-| Sharpness score (BT.601 luma of the cue's RGB decode + window, ~3ms on a 1616x1080 ARW preview; a grayscale decode + window, ~6ms, when the cue made no RGB decode) | first | second |
+| Sharpness score (BT.601 luma of the score's window of the cue's RGB decode + window, ~3ms on a 1616x1080 ARW preview when the luma still covered the whole frame; a grayscale decode + window, ~6ms, when the cue made no RGB decode) | first | second |
 | Whole-preview face search without a trusted AF point (~17ms at 320x320; ~64ms at 640x448 on Windows, after a 3/8 decode of ~5ms instead of the full-size ~14ms) | first | second |
 | Focus candidate cue (crop detection + face mesh eye regions, eye window fallback) | second | second |
 | HDR PQ CR3 HEVC decode (65-125ms) | up to three times per file | twice per file (thumbnail, analysis) |
@@ -992,8 +992,12 @@ one thread, warm), over the 282 trusted-AF 1616x1080 ARW previews of
 full-frame luma and window that replace it 3.1ms, a median saving of 3.2ms
 per file (3.0ms on a second pass). The score moved by a median 1.4% (the
 luma reading higher), and the within-burst order not at all (Spearman 1.000
-in all 50 bursts, the same top frame in each). A file with no trusted AF
-point and no confident face still scores on a grayscale decode, as before.
+in all 50 bursts, the same top frame in each). Since then the luma is
+computed over the score's window only, not the whole frame, which leaves
+every score bit-identical; that saving was not timed (see
+`docs/plans/_archived/20261128-core-analysis-closeouts/luma-window.md`). A
+file with no trusted AF point and no confident face still scores on a
+grayscale decode, as before.
 See `docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`.
 
 The first pass writes the rows in small batches (10) as their thumbnails finish, so the

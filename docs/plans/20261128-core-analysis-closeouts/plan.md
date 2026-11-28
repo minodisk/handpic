@@ -37,6 +37,11 @@ heading):
    A size band relative to the judged face or a higher floor on the AF path
    is to be measured and one of them adopted, with an `ALLFACES_VERSION`
    bump.
+4. "Core: face/eye-aware focus check for culling", its first checkbox
+   (added 2026-11-28): pass 3 checks every face only on frames at the group
+   threshold (default 5), so a frame with two to four faces shows the judged
+   face alone. Decided: check them too, and measure the accuracy on the
+   faces that are not the judged one.
 
 Out of scope: "Core: the time cost of pass 3's 0.6 floor is unmeasured on an
 idle host" (it needs repeated runs with the user's go-ahead).
@@ -45,7 +50,7 @@ Rules for every measurement in this plan (from `CLAUDE.md`): single runs
 only, one thread, no generated CPU load, no repeated loops. The host is
 shared, so no timing from these runs is quoted as a cost unless it is
 labeled a single run on a shared host. The user's task asks for these CLI
-runs, so Steps 1 and 3 build `handpic-cli` locally
+runs, so Steps 1, 3 and 4 build `handpic-cli` locally
 (`cargo build --release -p handpic-cli`, the CLI crate only).
 
 Test material, all present on this host on 2026-11-28 (read only):
@@ -68,10 +73,17 @@ Taken on 2026-11-28 with the recommended options (Trade-offs 1, 3 and 4):
 - Step 3: the new rule applies to frames with a trusted AF point only.
 - Step 3: a size band, if chosen, applies no band on a frame with no judged
   face.
+- Step 4: judge the frames under the group threshold too (the user's
+  decision: about 35 ms per face is acceptable, a missed blink of a second
+  person on a 2 to 4 person frame is worse). Keep `groupMinFaces` and lower
+  `group::DEFAULT` to 2 (Trade-offs 8, Option A); check the frames at gate
+  count 2 or more (Trade-offs 9, Option A); stop before changing the default
+  when more than half of the frames whose closed count comes from a
+  non-judged face alone are false (Trade-offs 11).
 
 ## Steps
 
-- [ ] Step 1: Compute the sharpness luma over the score's window only
+- [x] Step 1: Compute the sharpness luma over the score's window only
   - Done when:
     - `scan::score_rgb` computes the luma of only the window the score
       reads on the three window paths (the eye-AF frame window, the
@@ -258,6 +270,130 @@ Taken on 2026-11-28 with the recommended options (Trade-offs 1, 3 and 4):
       applies (Decisions; Trade-offs 4).
     - The bump makes pass 3 re-run on every row at the gate on the next
       scan of a folder; no schema change.
+- [ ] Step 4: Check every face on the frames under the old group threshold too
+  - Done when:
+    - Pass 3 runs by default on every frame whose gate count is 2 or more:
+      `group::DEFAULT` is 2 (`MIN` stays 2, `MAX` 20), so a fresh install,
+      and an install that never changed `Faces in a group photo`, checks
+      the eyes of every face of 60 px or more (`eyes::EYES_MIN_FACE`) on a
+      frame with a second face of the judged face's size. The setting
+      stays, as the way to raise the number again (Trade-offs 8).
+    - A frame with gate count 1 (the judged face alone) or 0 still gets no
+      pass 3 (Trade-offs 9).
+    - `ALLFACES_VERSION` is unchanged by this step (3 after Step 3): the
+      rows at gate 2 to 4 are not at that version, so `allfaces_todo` lists
+      them on the folder's next scan. A test in `crates/engine/src/index.rs`
+      or `crates/app/src/scan.rs` shows a row at gate 2 that pass 3 never
+      ran on is listed at `group::DEFAULT`.
+    - A `nonmain-eyes.md` in this plan folder records the accuracy check of
+      the faces that are not the judged face, on the build after Step 3:
+      the files run, how the faces were drawn, the labels (the `o` / `c` /
+      `u` / `x` scheme of
+      [eyes-truth.md](../_archived/20261007-closed-eyes-detection/eyes-truth.md)),
+      and from them: the precision of a `closed` reading and the share of
+      labeled-closed faces read as closed, among the non-judged faces
+      `allfaces::measured` accepts, split by box long side (60 to 80, 80 to
+      120, 120 px and more); how many accepted candidates are not faces;
+      and, per frame, how many frames at gate 2 to 4 get a closed count of
+      1 or more from a non-judged face alone, and how many of those are
+      true. It says which labels are the agent's and that the user's review
+      of the `closed` faces is final (pending or done).
+    - The same file records, as counts and not timings, how many of the
+      run's frames are at gate 2 or more against gate 5 or more, and how
+      many frames at gate 1 have a `judged` count of 2 or more (what
+      Trade-offs 9's option A leaves out).
+    - The docs describe the new default and no longer say that a frame
+      with two to four faces shows the judged face alone:
+      `docs/humans/usage.md` and `usage.ja.md` (the scan paragraph "at
+      least five confident faces", the closed-eyes mark's "On a group
+      photo ... Elsewhere it judges the one face only: a blinking bystander
+      gets no mark", the `Similar faces` / `Faces judged` paragraph, the
+      filter's `Anyone closed` / `Anyone soft` clause, and **Group
+      photos**' "5 by default"), `README.md` and `README.ja.md` (the "at
+      least five confident faces" sentence and the all-faces paragraph),
+      `docs/agents/app.md` (the `GroupMinFaces` and pass 3 paragraphs where
+      they name the default), `docs/agents/shared-crates.md` (the decision
+      and its reason: about 35 ms per face is accepted, a missed blink of a
+      second person on a 2 to 4 person frame is worse; and a pointer to
+      `nonmain-eyes.md`'s result), `CLAUDE.md` ("`DEFAULT` 5 within `MIN` 2
+      and `MAX` 20"), the module docs of `crates/app/src/group.rs` and
+      `crates/core/src/allfaces.rs` ("the caller runs it only on group
+      photos"), and the tool descriptions in `crates/engine/src/mcp.rs`
+      where they state the default.
+    - The first checkbox of `todo.md`'s "Core: face/eye-aware focus check
+      for culling" ("Judge every face at or above the 60 px floor ...") is
+      deleted; the item's heading, its introduction and its other
+      checkboxes stay. If `nonmain-eyes.md` leaves a follow-up (a cut to
+      tune, the gate 1 frames), it is added to `todo.md` as a new checkbox
+      of that item.
+    - `mise run ci:local` passes locally and the PR's GitHub checks pass.
+  - Implementation approach (as far as it is known; omit if unknown):
+    - Assumes Step 3 is merged: its rule drops the non-face candidates of
+      AF frames, which sit on frames at gate 1 to 4 and would otherwise
+      reach the strip mark and `Anyone soft` under the new default; the
+      accuracy check measures Step 3's candidates.
+    - Order inside the step: the accuracy check first, the default second.
+      If more than half of the frames whose closed count comes from a
+      non-judged face alone are false, stop, record it and update this plan
+      before changing the default (Trade-offs 11).
+    - Code, the default: `crates/app/src/group.rs` (`DEFAULT`, the module
+      doc, the test asserting `DEFAULT == 5`). Tests that hold the number 5
+      as the default and need the new one: `crates/app/src/settings.rs`
+      (`the_group_threshold_is_read_with_its_rule`),
+      `crates/app/src/companion.rs` (`get_settings`' `group_min_faces` of
+      5, and the `set_settings` cases built on `group_min_faces: 5` being
+      no change), `crates/app/src/scan.rs` (the two tests calling
+      `allfaces_todo` at `2` and at `group::DEFAULT`, which no longer
+      differ), `crates/app/src/mark.rs` (uses `group::DEFAULT`).
+      `Index::allfaces_todo`, `group::shown`, `mark::closed_eyes_mark`,
+      `meta::analysis` and `filter.rs` take the threshold as a parameter
+      and need no change.
+    - `EYES_MIN_FACE` (60.0, `crates/core/src/eyes.rs`) is the 60 px floor
+      of the item; `allfaces::candidates` already applies it through
+      `candidate::meshes_face`, and `MAX_FACES` (8) still caps a frame.
+      Nothing in `crates/core` changes in this step.
+    - What the stored gate count is: the judged face plus the faces of 0.5
+      to 2 times its box long side at 0.6 or more, counted at 320x224 on an
+      AF frame and at 640x448 without an AF point. It is not the number of
+      faces of 60 px or more: pass 3's candidates come from the 640x448
+      search with no size band (unless Step 3 adopted one on AF frames).
+      Gate 1 therefore does not mean "one face in the frame".
+    - Verify during implementation: `groupMinFaces` is written to the
+      settings store only when the user changes the field
+      (`set_group_min_faces`), so an install that never touched it reads
+      the new default; and an open of an already scanned folder reaches
+      `allfaces_todo` after passes 1 and 2 found nothing to do (the scan
+      thread in `crates/app/src/scan.rs` lists it unconditionally after
+      `run_faces_pass`).
+    - The accuracy check, single runs only, one thread, no timing taken:
+      one release build of the CLI (`cargo build --release -p handpic-cli`)
+      with an uncommitted, environment-gated scratch dump in
+      `allfaces::measure_unless` or `scan::other_faces` (as Step 3 and the
+      candidates-floor measurement did), one line per candidate: file, box,
+      score, long side, long side over the judged face's, the mesh's
+      presence, eye offset, EAR, whether `measured` accepted it, closed or
+      not by `EYES_CLOSED_EAR`; and for each accepted candidate a crop
+      written to a folder outside the repository (for example
+      `D:\Photos\tests\2026-11-28-nonmain-eyes\`, as the eyes-truth set
+      did): the eye band through both eye points from the upright preview,
+      upscaled, plus the face box crop. Keep the scratch change as a
+      `.patch` file in this plan folder so the run can be repeated.
+    - Runs: one `handpic-cli allfaces` over the first 300 ARW of
+      `D:\photos\2026\2026-11-07` (trusted AF, a team sport, many frames at
+      gate 2 to 4) and one over `D:\photos\2026\2026-02-01` (146 DNG, no AF
+      point, posed groups). The gate count per file comes from one
+      `handpic-cli features` run of the same files, or from Step 3's
+      `measurement.md` if it lists them. If Step 3's confirming run already
+      wrote this dump for the 300 files, reuse it instead of running again.
+    - Labels: every non-judged face read as closed, and a seeded random
+      draw of about 100 of those read as open, shuffled so the reading is
+      not visible while labeling. The agent labels from the crops (viewing
+      the images with `Read`); the user's review of the `closed` ones is
+      final, as in eyes-truth. Record the seed and the crop folder.
+    - `docs/humans/performance.md` states that the entry point's caller
+      runs it "only on the frames whose gate count reaches a threshold";
+      that stays true. Do not add a cost figure: the time of pass 3 at the
+      new default is not measured here.
 
 ## Trade-offs and risks
 
@@ -308,5 +444,59 @@ Taken on 2026-11-28 with the recommended options (Trade-offs 1, 3 and 4):
 7. Step 3 changes counts users may have seen (`Faces judged`, `Anyone
    soft`) only on frames where a dropped candidate was counted, all under
    the default gate of 5 in the measured set.
+8. Step 4, what becomes of `groupMinFaces`. Decided: Option A.
+   - Option A (taken): keep the setting and change `group::DEFAULT` from 5
+     to 2. The smallest change (one constant, tests, docs), no
+     `ALLFACES_VERSION` bump, and the setting stays as the way to raise the
+     number on a machine where pass 3 is too slow. Consequences: a user who
+     has an explicit `groupMinFaces` in the store keeps that number (the
+     step verifies the store is written only on a change), and `Faces in a
+     group photo` now defaults to a number that is not a group.
+   - Option B: remove the setting; pass 3 always runs at gate 2 or more and
+     `group::shown` shows whatever is stored. It deletes the Culling page's
+     field, `set_group_min_faces`, the `groupMinFaces` read, `get_settings`
+     / `set_settings`' `group_min_faces` (an MCP tool schema change), the
+     companion coverage row and their tests and docs: about ten files, and
+     no way back for a user who finds the pass too slow.
+   - Option C: keep the setting and the default 5, add a second fixed rule
+     that always checks gate 2 to 4. Two rules for one pass.
+9. Step 4, which frames under the threshold are checked. Decided: Option A.
+   - Option A (taken): gate count 2 or more. No schema or pass 2 change. It
+     leaves out a frame whose second face is outside 0.5 to 2 times the
+     judged face's size, or was missed by the 320x224 gate search of an AF
+     frame. The step records how many gate 1 frames have a second judged
+     face so this can be revisited.
+   - Option B: gate count 1 or more, every frame with a judged face. It
+     runs the entry point on every faced frame (a second read and decode,
+     the cue again and the 640x448 search before any mesh, about 170 to 190
+     ms per AF file on one thread in `docs/humans/performance.md`), so the
+     analysis time of a one-person folder roughly triples.
+   - Option C: have pass 2 store a count of the faces of 60 px or more with
+     no size band and gate on that. A new column, a `FACES_VERSION` bump and
+     a re-run of pass 2 on every indexed folder.
+   - Frames with one face and frames with no judged face need nothing: the
+     judged face's eyes are already stored by pass 2, and gate 0 is Step 2's
+     case.
+10. Step 4, cost. The decision rests on about 35 ms per extra face, but pass
+    3's cost per frame is the entry point's fixed part (the second read and
+    decode, the cue again, the 640x448 search, the full JPEG read) plus the
+    meshes. On the 300-file team-sport slice 181 frames are at gate 3 or
+    more against 37 at 5 or more, so pass 3 there runs on about five times
+    as many frames or more. It runs last, at the lowest priority, but
+    `checking faces` lasts much longer on such a folder. Not measured in
+    this plan. If it is too long, the setting raises the number again;
+    folding the all-faces check into pass 2's decode would remove the fixed
+    part and is separate work.
+11. Step 4, what the accuracy check may show. Faces that are not the judged
+    one are smaller, more often turned or half covered, and on sports
+    frames out of focus by nature, so `Anyone soft` will match many frames
+    at gate 2 to 4. Whether the closed readings are right is what
+    `nonmain-eyes.md` records. The step changes no cut: if more than half of
+    the frames whose closed count comes from a non-judged face alone are
+    false, it stops before changing the default and the plan is updated (a
+    tighter `EYES_CLOSED_EAR` or presence floor for candidates would need an
+    `ALLFACES_VERSION` bump to 4 and is not planned here).
 
 ## Progress
+
+- (2026-11-28) Step 1 complete
