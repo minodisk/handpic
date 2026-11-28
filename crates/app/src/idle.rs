@@ -46,6 +46,11 @@ impl<T> IdleGate<T> {
         self.held.as_ref().map(|(label, _)| *label)
     }
 
+    /// The held operation, with its label.
+    pub fn held(&self) -> Option<(&'static str, &T)> {
+        self.held.as_ref().map(|(label, op)| (*label, op))
+    }
+
     /// A count rather than a flag, as in `idle.ts`: two operations can
     /// overlap, and the first to settle must not clear the other's.
     pub fn enter_in_flight(&mut self) {

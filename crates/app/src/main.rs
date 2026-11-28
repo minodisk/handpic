@@ -5805,10 +5805,9 @@ impl Handpic {
     }
 
     /// The status line, then the strip position (while a file is shown) and
-    /// the progress circle while an operation with a count runs, at its right
-    /// end, an empty slot of the circle's size in its place otherwise so the
-    /// position does not move; the row is pinned to `STATUS_ROW_HEIGHT`, so it
-    /// does not follow the circle.
+    /// the task indicators at its right end, one slot per task kind, an empty
+    /// one keeping its width so neither the others nor the position move; the
+    /// row is pinned to `STATUS_ROW_HEIGHT`, so it does not follow them.
     fn status_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut row = StatusBar::new().h(STATUS_ROW_HEIGHT).child(self.status());
         if let Some(position) = pager::position(
@@ -5819,10 +5818,7 @@ impl Handpic {
         ) {
             row = row.right(position);
         }
-        row.right(match self.progress_circle(cx) {
-            Some(circle) => circle.into_any_element(),
-            None => div().size_3().flex_none().into_any_element(),
-        })
+        row.right(self.task_indicators(cx))
     }
 
     /// The strip's header row: the sort and filter buttons at its right end,
@@ -5857,24 +5853,94 @@ impl Handpic {
             ))
     }
 
-    /// The status row's progress circle while an operation with a count runs
-    /// (`progress::shown`), its value 0-100 from `progress::fraction`.
-    fn progress_circle(&self, cx: &App) -> Option<ProgressCircle> {
-        let (done, total) = progress::shown(
-            self.trashing.map(|(_, done, total)| (done, total)),
-            self.undo_progress,
-            self.folderops
-                .sequence_progress()
-                .or(self.folderops.import_progress())
-                .or(self.folderops.sidecar_progress()),
-            self.scan_status.running(),
-        )?;
-        Some(
-            ProgressCircle::new("progress")
-                .small()
-                .color(cx.theme().primary)
-                .value(progress::fraction(done, total) * 100.),
-        )
+    /// Every running task (`progress::tasks`): the scan's pass, a trash run,
+    /// its undo or redo, a folder operation's run, the operation the gate
+    /// holds and the update's download or verify.
+    fn tasks(&self) -> Vec<progress::Task> {
+        let folder = if let Some((done, total)) = self.folderops.sequence_progress() {
+            Some((progress::FolderRun::Sequence, done, total))
+        } else if let Some((done, total)) = self.folderops.import_progress() {
+            Some((progress::FolderRun::Import, done, total))
+        } else {
+            self.folderops.sidecar_progress().map(|(done, total)| {
+                let label = self.running_op.unwrap_or(sidecars::Kind::Rewrite.label());
+                (progress::FolderRun::Sidecars(label), done, total)
+            })
+        };
+        let held = self.gate.held().map(|(label, op)| {
+            let kind = match op {
+                HeldOp::Run(_) | HeldOp::Undo(_) | HeldOp::Redo(_) => progress::Kind::Trash,
+                HeldOp::Sidecars(_) | HeldOp::Rename(_) => progress::Kind::Folder,
+            };
+            (kind, label)
+        });
+        let download = match self.updates.phase() {
+            update::Phase::Downloading { percent, .. } => Some(*percent),
+            update::Phase::Verifying(_) => Some(None),
+            _ => None,
+        };
+        progress::tasks(progress::Sources {
+            scan: self.scan_status.pass(),
+            trash: self.trashing.map(|(mode, done, total)| {
+                (self.running_op.unwrap_or(mode.label()), mode, done, total)
+            }),
+            undo: self
+                .undo_progress
+                .map(|(done, total)| (self.running_op.unwrap_or("Undo"), done, total)),
+            folder,
+            held,
+            update: download.map(|percent| (percent, self.updates.status_text())),
+        })
+    }
+
+    /// One slot per task kind in `progress::KINDS` order, each the kind's
+    /// icon beside a small `ProgressCircle` of its task, counted from
+    /// `progress::fraction`, else dim and indeterminate, with the task's one
+    /// line as its tooltip; a kind with no task leaves its slot empty.
+    fn task_indicators(&self, cx: &App) -> impl IntoElement {
+        let tasks = self.tasks();
+        let (primary, muted) = (cx.theme().primary, cx.theme().muted_foreground);
+        h_flex()
+            .flex_none()
+            .gap_1()
+            .children(progress::slots(&tasks).map(|(kind, task)| {
+                let slot = h_flex()
+                    .id(("task-slot", kind as usize))
+                    .w(px(TASK_SLOT_WIDTH))
+                    .flex_none()
+                    .gap_1()
+                    .justify_center();
+                let Some(task) = task else {
+                    return slot.into_any_element();
+                };
+                let (color, circle) = match task.amount {
+                    progress::Amount::Counted { done, total } => (
+                        primary,
+                        ProgressCircle::new(("task", kind as usize))
+                            .value(progress::fraction(done, total) * 100.),
+                    ),
+                    progress::Amount::Unknown => (
+                        muted,
+                        ProgressCircle::new(("task", kind as usize)).loading(true),
+                    ),
+                };
+                let tip: SharedString = task.tip.clone().into();
+                slot.child(
+                    svg()
+                        .path(kind.icon())
+                        .size_3()
+                        .flex_none()
+                        .text_color(color),
+                )
+                .child(
+                    circle
+                        .small()
+                        .color(color)
+                        .accessibility_label(task.label.clone()),
+                )
+                .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+                .into_any_element()
+            }))
     }
 
     /// The title bar's gear. The wrapper stops the press after the button's
@@ -7293,6 +7359,8 @@ const MENU_BUTTON_HEIGHT: Pixels = px(21.);
 /// The status row's height from when it held the buttons: their 21 px,
 /// `StatusBar`'s `py_1` above and below and its 1 px top border.
 const STATUS_ROW_HEIGHT: Pixels = px(30.);
+/// A task indicator's slot: its 12 px icon, the gap and its 12 px circle.
+const TASK_SLOT_WIDTH: f32 = 28.;
 /// `PopupMenu`'s row height at its default size (1.625 rem at the window's
 /// 16 px rem) and its horizontal padding (0.5 rem).
 const MENU_ROW: f32 = 26.;

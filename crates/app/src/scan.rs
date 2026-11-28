@@ -291,12 +291,6 @@ impl Status {
         self.pass().is_some()
     }
 
-    /// The running pass's `(done, total)`, pass 1's before pass 2's before
-    /// pass 3's.
-    pub fn running(&self) -> Option<(usize, usize)> {
-        self.pass().map(|(_, done, total)| (done, total))
-    }
-
     /// The running pass as the status line names it, with its
     /// `(done, total)`.
     pub fn pass(&self) -> Option<(&'static str, usize, usize)> {
@@ -878,23 +872,23 @@ mod tests {
     }
 
     #[test]
-    fn the_running_pass_gives_the_bar_its_counts() {
+    fn the_running_pass_gives_the_indicator_its_counts() {
         let mut status = Status::default();
-        assert_eq!(status.running(), None);
+        assert_eq!(status.pass(), None);
         status.started(10);
-        assert_eq!(status.running(), Some((0, 10)));
+        assert_eq!(status.pass(), Some(("scanning", 0, 10)));
         status.extracting(3, 10);
-        assert_eq!(status.running(), Some((3, 10)));
+        assert_eq!(status.pass(), Some(("scanning", 3, 10)));
         status.extracted();
-        assert_eq!(status.running(), Some((0, 0)));
+        assert_eq!(status.pass(), Some(("analyzing", 0, 0)));
         status.analyzing(4, 9);
-        assert_eq!(status.running(), Some((4, 9)));
+        assert_eq!(status.pass(), Some(("analyzing", 4, 9)));
         status.analyzed(3);
-        assert_eq!(status.running(), Some((0, 3)));
+        assert_eq!(status.pass(), Some(("checking faces", 0, 3)));
         status.checking(2, 3);
-        assert_eq!(status.running(), Some((2, 3)));
+        assert_eq!(status.pass(), Some(("checking faces", 2, 3)));
         status.clear();
-        assert_eq!(status.running(), None);
+        assert_eq!(status.pass(), None);
     }
 
     #[test]

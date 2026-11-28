@@ -378,8 +378,8 @@ from `src/icons.rs` (served by `Icons`, the application's one
 star, the frowning `scan-face` and the title bar's thin `settings` gear,
 under their license header,
 then the `gpui-kit-assets` catalog icons selected with `icon_assets!`
-(the orientation rectangles, `scan-face` and the closed-eyes mark's
-`eye-off`), then
+(the orientation rectangles, `scan-face`, the closed-eyes mark's
+`eye-off` and the task indicators' `trash` and `download`), then
 `gpui_kit::assets::Assets`, which serves `star` and the icons
 gpui-component's controls draw, with the title bar's
 `icons/64x64.png` for `img(..)`),
@@ -675,11 +675,19 @@ below `READ_FLOOR_BPS`; `latency_start`, the key else the selection change),
 redraw, both only while shown; the pure layout, `x_of`, `y_of`, `stack` over
 the `page` line's stages and `shown`; `paint`, a port of `drawPerf`
 as a 120 px band along the bottom of the preview canvas over the fit view
-and the 1:1 crop alike), `src/progress.rs` the window's one progress indicator
-(`fraction`, a port of `progress.ts`'s `progressWidth`, and `shown`, a Move to
-Trash / Delete Permanently run before the undo of one before a folder
-operation's run before the scan's running pass, any of its three), which the window draws as a gpui-component
-`ProgressCircle` in the status row's `StatusBar`, right of the position,
+and the 1:1 crop alike), `src/progress.rs` the status row's task indicators (`tasks`,
+every running task from the view's `Sources`, each a `Task` of its `Kind`,
+its label, its `Amount`, counted or unknown, and its tooltip's one line, in
+the fixed kind order scan, trash (a Move to Trash / Delete Permanently run,
+its redo or undo), folder (a folder operation's run), update (its download or
+verify), a kind's running task before the operation the idle gate holds,
+which is unknown; `slots`, each kind's slot with its first task; `fraction`,
+a port of `progress.ts`'s `progressWidth`), which the window draws in the
+status row's `StatusBar`, right of the position, one fixed-width slot per
+kind (`task_indicators`), each the kind's Lucide icon (`scan-face`,
+`trash`, `folder`, `download`) beside a small gpui-component
+`ProgressCircle`, an unknown one dim and loading, with its line as a
+`Tooltip`, an empty slot keeping its width,
 and `src/panels.rs` the panes shown (`Panels`, a
 port of `panels.ts` and the Tauri `panels_setting`: `toggle`, `toggle_sides`,
 `from_setting` and `setting`, the `panels` value of the settings store, a
