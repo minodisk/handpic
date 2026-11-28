@@ -170,7 +170,7 @@ run of the reader that prints a reading.
 
 ## Steps
 
-- [ ] Step 1: The reader, the readings, the Decision and the `todo.md` section
+- [x] Step 1: The reader, the readings, the Decision and the `todo.md` section
   - Done when:
     - `culling.py` in this plan folder (`mise x -- python -I -B culling.py
       <app-dump-dir> <strict-dir> <discard-dir> <confirm-dir> <out-dir>`)
