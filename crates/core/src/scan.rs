@@ -15,7 +15,10 @@ use crate::eyes::judged_face;
 use crate::faces::{decode_gate, detect_around, detect_gate_upright, Detection, Face};
 use crate::fullsharp::full_eye_sharpnesses;
 use crate::reader::{read_full_undecoded, read_metadata, read_preview_undecoded};
-use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus};
+use crate::sharpness::{
+    eye_af_frame, laplacian_variance, region, score_preview, tile_max, trusted_focus, Region,
+    Window,
+};
 
 /// Quality of the cached thumbnails. 80 gives ~19KB for a 404x270 frame.
 pub const THUMBNAIL_QUALITY: f32 = 80.0;
@@ -480,7 +483,9 @@ type Rgb = (Vec<u8>, usize, usize);
 
 /// The score (`sharpness::score_gray`) of the AF point `focus` with its
 /// eye-AF `frame`, else of `faces`, on the luma of `rgb`; a failure or panic
-/// is no score.
+/// is no score. On a window path only the window's luma is computed, which
+/// gives the same score since `laplacian_variance` reads nothing outside
+/// its window.
 fn score_rgb(
     (pixels, width, height): &Rgb,
     focus: Option<FocusLocation>,
@@ -488,17 +493,32 @@ fn score_rgb(
     faces: &[Face],
 ) -> Option<f64> {
     catch_unwind(AssertUnwindSafe(|| {
-        score_gray(
-            &luma(pixels, *width, *height),
-            *width,
-            *height,
-            focus,
-            frame,
-            faces,
-        )
+        Ok::<_, anyhow::Error>(match region(*width, *height, focus, frame, faces)? {
+            Region::Window(window) => laplacian_variance(
+                &window_luma(pixels, *width, window),
+                window.width,
+                Window {
+                    x: 0,
+                    y: 0,
+                    ..window
+                },
+            ),
+            Region::Tiles => tile_max(&luma(pixels, *width, *height), *width, *height),
+        })
     }))
     .ok()
     .and_then(Result::ok)
+}
+
+/// `candidate::luma` of the pixels of `window` of the `width`-wide RGB
+/// image `rgb`, row by row, `window.width` bytes per row.
+fn window_luma(rgb: &[u8], width: usize, window: Window) -> Vec<u8> {
+    (window.y..window.y + window.height)
+        .flat_map(|y| {
+            let start = (y * width + window.x) * 3;
+            luma(&rgb[start..start + window.width * 3], window.width, 1)
+        })
+        .collect()
 }
 
 /// `decode_rgb` of `preview`; a failure or panic is none.
@@ -1216,7 +1236,7 @@ mod tests {
     use super::*;
     use crate::arw::{Codec, Embedded};
     use crate::eyes::MESH_CALLS;
-    use crate::sharpness::FACE_CONFIDENCE;
+    use crate::sharpness::{score_gray, FACE_CONFIDENCE};
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
@@ -2006,6 +2026,65 @@ mod tests {
         assert_eq!(
             scored, None,
             "no decode leaves the score to score_preview's own decode"
+        );
+    }
+
+    #[test]
+    fn the_windowed_luma_scores_as_the_full_frame_luma() {
+        let (w, h) = (640, 480);
+        let pixels: Vec<u8> = (0..w * h)
+            .flat_map(|i| {
+                let (x, y) = (i % w, i / w);
+                let v = (x * 7 + y * 13 + (x * y) % 31) as u8;
+                [v, v.wrapping_mul(3), 255 - v / 2]
+            })
+            .collect();
+        let rgb = (pixels, w, h);
+        let at = |x, y| FocusLocation {
+            sensor_w: 6000,
+            sensor_h: 4000,
+            x,
+            y,
+        };
+        let frame = FocusFrame {
+            width: 300,
+            height: 300,
+        };
+        let mut face = scored(0.9, 150.0);
+        face.left_eye = (300.0, 200.0);
+        face.right_eye = (340.0, 200.0);
+        let cases = [
+            ("eye-AF frame", Some(at(2000, 1500)), Some(frame), vec![]),
+            ("AF point", Some(at(2000, 1500)), None, vec![]),
+            ("eyes of the face", None, None, vec![face]),
+            ("clamped at the edge", Some(at(5990, 10)), None, vec![]),
+        ];
+        assert_eq!(
+            region(w, h, Some(at(5990, 10)), None, &[]).unwrap(),
+            Region::Window(Window {
+                x: w - 256,
+                y: 0,
+                width: 256,
+                height: 256,
+            }),
+            "the edge case is clamped"
+        );
+        let gray = luma(&rgb.0, w, h);
+        for (name, focus, frame, faces) in cases {
+            let Region::Window(window) = region(w, h, focus, frame, &faces).unwrap() else {
+                panic!("{name}: a window path");
+            };
+            assert!(window.width < w && window.height < h, "{name}: {window:?}");
+            assert_eq!(
+                score_rgb(&rgb, focus, frame, &faces),
+                Some(score_gray(&gray, w, h, focus, frame, &faces).unwrap()),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            score_rgb(&rgb, None, None, &[]),
+            Some(score_gray(&gray, w, h, None, None, &[]).unwrap()),
+            "the tiles"
         );
     }
 
