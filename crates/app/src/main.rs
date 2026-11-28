@@ -1668,7 +1668,7 @@ impl Handpic {
     }
 
     /// An item of the strip's menu: the reveal acts on the focused file, the
-    /// copy items on the targets, one per line, as listed; a judgment runs
+    /// copy items on the targets, one per line, as shown; a judgment runs
     /// as its key does.
     fn files_action(
         &mut self,
@@ -1681,7 +1681,7 @@ impl Handpic {
             context::Action::SelectAll => self.select_all(cx),
             context::Action::RevealFile => cx.reveal_path(Path::new(&context::shown_path(focused))),
             context::Action::CopyPath => {
-                cx.write_to_clipboard(ClipboardItem::new_string(paths.join("\n")));
+                cx.write_to_clipboard(ClipboardItem::new_string(context::copied_paths(paths)));
             }
             context::Action::CopyFileName => {
                 let names: Vec<String> = paths.iter().map(|p| file_name(Path::new(p))).collect();

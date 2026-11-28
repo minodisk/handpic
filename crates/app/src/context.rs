@@ -247,6 +247,16 @@ pub fn shown_path(path: &str) -> String {
     }
 }
 
+/// The strip's `Copy Path` text: each path as shown, one per line, so the
+/// clipboard holds the tree's spelling, which other programs accept.
+pub fn copied_paths(paths: &[String]) -> String {
+    paths
+        .iter()
+        .map(|p| shown_path(p))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// The title bar's name of the open folder: its last component, else (a
 /// drive root such as `C:\` or `/`) the shown path.
 pub fn folder_title(dir: &str) -> String {
@@ -723,6 +733,19 @@ mod tests {
         );
         assert_eq!(shown_path(r"D:\Photos\a.ARW"), r"D:\Photos\a.ARW");
         assert_eq!(shown_path("/Users/a/b.ARW"), "/Users/a/b.ARW");
+    }
+
+    #[test]
+    fn copied_paths_drop_the_verbatim_prefix_one_per_line() {
+        let paths = [
+            r"\\?\D:\Photos\a.ARW".to_owned(),
+            r"\\?\UNC\server\share\b.ARW".to_owned(),
+            r"D:\Photos\c.ARW".to_owned(),
+        ];
+        assert_eq!(
+            copied_paths(&paths),
+            "D:\\Photos\\a.ARW\n\\\\server\\share\\b.ARW\nD:\\Photos\\c.ARW"
+        );
     }
 
     #[test]

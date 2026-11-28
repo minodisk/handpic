@@ -36,16 +36,6 @@ Files: `docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, `crates/core
 
 - [ ] When real bursts of another make are on the host, run `lumascore.patch`'s subcommand (in `docs/plans/_archived/20261128-af-luma-reuse/`) and `burst_spearman.py one` on them, and record the within-burst Spearman and the top-frame share. If the ranking holds, update the "other makes' AF bursts were not checked" sentence in `docs/agents/shared-crates.md`; if it breaks, restrict the reuse by make and bump `FACES_VERSION`.
 
-### App: the strip's Copy Path copies the Windows verbatim prefix
-
-#### Background
-
-Seen on 2026-11-28 (Windows 11) while checking the right-click menus' keys (`docs/plans/_archived/20261128-context-menu-keys/results.md`): the strip menu's `Copy Path` on `_DSC1495.ARW` put `\\?\D:\Photos\tests\20261128-cmk\photos\_DSC1495.ARW` on the clipboard, while the tree menu's `Copy Path` put `D:\Photos\tests\20261128-cmk` (no prefix). The strip's handler in `crates/app/src/main.rs` (`context::Action::CopyPath` next to `RevealFile`, which does use `context::shown_path`) joins the listed paths as they are. Files: `crates/app/src/main.rs`, `crates/app/src/context.rs`.
-
-#### TODO
-
-- [ ] Pass each path through `context::shown_path` before the strip's `Copy Path` joins them, with a test, so the clipboard holds `D:\...` as the tree's does.
-
 ### App: confirm the split-deferred-open test fails without its fix
 
 #### Background
