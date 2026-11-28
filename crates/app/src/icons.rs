@@ -36,6 +36,8 @@ pub const SCAN_FACE_FROWN: &str = "icons/scan-face-frown.svg";
 pub const EYE_OFF: &str = "icons/eye-off.svg";
 pub const FOLDER: &str = "icons/folder.svg";
 pub const FOLDER_OPEN: &str = "icons/folder-open.svg";
+pub const TRASH: &str = "icons/trash.svg";
+pub const DOWNLOAD: &str = "icons/download.svg";
 pub const SETTINGS_THIN: &str = "icons/settings-thin.svg";
 pub const APP: &str = "icons/app.png";
 
@@ -59,7 +61,14 @@ const SVGS: [(&str, &str); 3] = [
 // the missing one into this list.
 gpui_kit::assets::icon_assets!(
     Catalog,
-    [RectangleVertical, RectangleHorizontal, ScanFace, EyeOff]
+    [
+        RectangleVertical,
+        RectangleHorizontal,
+        ScanFace,
+        EyeOff,
+        Trash,
+        Download
+    ]
 );
 
 pub struct Icons;
@@ -104,7 +113,7 @@ mod tests {
 
     use super::*;
 
-    const PATHS: [&str; 10] = [
+    const PATHS: [&str; 12] = [
         STAR,
         STAR_FILLED,
         RECTANGLE_VERTICAL,
@@ -114,6 +123,8 @@ mod tests {
         EYE_OFF,
         FOLDER,
         FOLDER_OPEN,
+        TRASH,
+        DOWNLOAD,
         SETTINGS_THIN,
     ];
 
@@ -142,6 +153,8 @@ mod tests {
             (EYE_OFF, IconName::EyeOff),
             (FOLDER, IconName::Folder),
             (FOLDER_OPEN, IconName::FolderOpen),
+            (TRASH, IconName::Trash),
+            (DOWNLOAD, IconName::Download),
         ] {
             assert_eq!(name.path().as_ref(), path);
         }

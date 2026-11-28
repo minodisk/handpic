@@ -23,6 +23,7 @@ use crate::{
     filter::Orientation,
     fitted_name, menu, open_index, open_main,
     panewidths::PaneWidths,
+    progress,
     scan::{Priorities, Running},
     settings,
 };
@@ -865,6 +866,55 @@ fn a_rename_held_over_the_scan_runs_at_its_end_and_the_ring_fills_again() {
         let next = view.files[1].to_string_lossy();
         view.prefetch.as_ref().unwrap().holds(&next)
     });
+}
+
+#[test]
+fn the_task_list_holds_the_scan_beside_a_held_rename_and_empties_at_the_end() {
+    let mut ui = Ui::open();
+    assert!(ui.read(|view| view.tasks().is_empty()));
+    let folder = ui.dir().join("photos");
+    fs::create_dir(&folder).unwrap();
+    for name in ["a.dng", "b.dng", "c.dng"] {
+        fs::write(folder.join(name), dng(1)).unwrap();
+    }
+    let path = folder.to_string_lossy().into_owned();
+    // The scan's reads wait while this pause is held, so its task is there to
+    // be seen however fast the machine is.
+    let pause = ui.read(|view| view.slots.pause());
+    let held = ui.update(|view, cx| {
+        view.open_from_tree(path.clone(), cx).detach();
+        view.request_rename(path, "renamed".into(), cx);
+        view.tasks()
+    });
+    let waiting = progress::Task {
+        kind: progress::Kind::Folder,
+        label: crate::rename::LABEL.to_owned(),
+        amount: progress::Amount::Unknown,
+        tip: format!("{}: waiting for the scan to finish", crate::rename::LABEL),
+    };
+    assert_eq!(held.last(), Some(&waiting));
+    ui.wait_until("the scan's task beside the held rename", |view| {
+        let tasks = view.tasks();
+        tasks.len() == 2 && tasks[0].kind == progress::Kind::Scan
+    });
+    let tasks = ui.read(|view| view.tasks());
+    assert_eq!(tasks[1], waiting);
+    let progress::Amount::Counted { done, total } = tasks[0].amount else {
+        panic!("the scan is counted: {:?}", tasks[0]);
+    };
+    let pass = ui.read(|view| view.scan_status.pass()).unwrap();
+    assert_eq!((pass.1, pass.2), (done, total));
+    assert_eq!(tasks[0].tip, format!("{} {done}/{total}", pass.0));
+    drop(pause);
+    ui.wait_until("the held rename's reopen", |view| {
+        !view.renaming()
+            && view
+                .dir
+                .as_ref()
+                .is_some_and(|dir| dir.ends_with("renamed"))
+    });
+    ui.wait_idle("the renamed folder's preview", 3);
+    assert!(ui.read(|view| view.tasks().is_empty()));
 }
 
 #[test]

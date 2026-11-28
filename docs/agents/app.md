@@ -2178,7 +2178,7 @@ so the strip pane owns the controls over which files are listed and in what
 order. The status row is gpui-component's `StatusBar` (see "The status row
 is gpui-component's `StatusBar` with its defaults"): the status text in its
 center region, then, in its right region, the strip position and the
-progress circle while an operation runs. The status text is a transient note (an error, the drop
+task indicators, one slot per task kind. The status text is a transient note (an error, the drop
 refusal, the empty-folder and filtered texts) that `present` clears on every
 presented preview, as the Tauri `present`'s `setStatus()` did, followed by
 `status()`'s suffixes with no leading separator when the note is empty; the
@@ -2377,7 +2377,8 @@ path constant per icon (`icons/<name>.svg`), the SVG strings of the app's
 own derivatives (the filled star, the frowning `scan-face`, the title bar's
 thin `settings` gear),
 `Catalog`, the catalog icons selected with `gpui_kit::assets::icon_assets!`
-(`rectangle-vertical`, `rectangle-horizontal`, `scan-face`), and `Icons`,
+(`rectangle-vertical`, `rectangle-horizontal`, `scan-face`, `eye-off`, and
+the task indicators' `trash` and `download`), and `Icons`,
 whose `load` answers the own paths with borrowed bytes, then `Catalog`'s,
 then any other from `gpui_kit::assets::Assets`, which serves `star`
 and the tree's `folder` and `folder-open`, a path in none of them with
@@ -4311,25 +4312,54 @@ the `page` line and goes into `Summary`. A stale preview drawn on the way
   cost is the `on()` check in `paint` and in `loaded`.
 
 
-### One progress circle sits in the status row's right region (Inferred)
+### One task indicator per task kind sits in the status row's right region (Inferred)
 
-`progress.rs` holds the indicator's model: `fraction`, a port of
-`progress.ts`'s `progressWidth` (0 while `total` is 0, never above 1), and
-`shown`, which picks the `(done, total)` the indicator shows when several
-operations run: a Move to Trash, Delete Permanently or trash redo run first
-(`Handpic.trashing`, the counts the pane's note is formatted from with
-`trash::progress_status`), then the undo of a trash run
-(`Handpic.undo_progress`), then a folder operation's run, then the scan's
-running pass (`scan::Status::running`, pass 1's before pass 2's, the two
-sharing the one indicator). `main.rs`'s `progress_circle` draws it as
-gpui-component's `ProgressCircle` (`Size::Small`, 12 px, the row's text
-size), colored `primary`, its value `fraction * 100`, in the
-`StatusBar`'s right region right of the position, only while `shown`
-yields a count. While it does not, an empty, non-shrinking `size_3` `div`
-holds its slot, so the right region's content width is constant and the
-position stays where it is when the circle appears or goes (the user's
-decision, 2026-11-22; before, the position shifted about 20 px). The Tauri app drew a bar along the row's top edge
-(`#scan-progress`); the circle is the user's decision.
+`progress.rs` holds the indicators' model, pure and free of GPUI types:
+`tasks` takes the view's `Sources` and gives every running task as a `Task`
+(its `Kind`, its label, its `Amount`, `Counted { done, total }` or
+`Unknown`, and its tooltip's one line) in the fixed kind order
+`progress::KINDS`: scan, trash, folder, update. The sources are the scan's
+running pass (`scan::Status::pass`, pass 1's before pass 2's before pass
+3's, the tip `scanning 3/10` as the status line's suffix words it), a Move
+to Trash, Delete Permanently or trash redo run (`Handpic.trashing`, its tip
+`trash::progress_status`, its label `running_op`), the undo of one
+(`Handpic.undo_progress`, `Undo Move to Trash 1 / 4`), a folder
+operation's run (`FolderOps`' `sequence_progress()`, else
+`import_progress()`, else `sidecar_progress()`, the tips
+`sequence::progress_status`, `import::progress_status` and the sidecar
+run's label with its count), the operation the idle gate holds
+(`IdleGate::held`, a trash run, undo or redo under trash, a sidecar run or a
+folder rename under folder, its tip the pane's
+`<label>: waiting for the scan to finish`) and the update's download
+(`update::Phase::Downloading`, counted by its percent out of 100 when the
+size is known) or verify (`Phase::Verifying`), the tip
+`Updates::status_text`. A held operation, a download of unknown size and
+the verify are `Unknown`; within a kind, a running task comes before the
+held one. `slots` gives each kind its first task, so a kind holding two (a
+held trash run and a running one) shows the running one.
+
+`main.rs`'s `task_indicators` draws one slot per kind in that order, in
+the `StatusBar`'s right region right of the position, each
+`TASK_SLOT_WIDTH` (28 px) wide and non-shrinking: the kind's Lucide icon
+(`scan-face`, `trash`, `folder`, `download`, 12 px) beside a
+gpui-component `ProgressCircle` (`Size::Small`, 12 px, the row's text size),
+both colored `primary` and the circle's value `fraction * 100` for a
+counted task, both `muted_foreground` and the circle `.loading(true)` for an
+unknown one, the slot's hover showing the task's tip in a gpui-component
+`Tooltip` and the label the circle's accessibility label. A kind with no
+task leaves its slot empty at the same width, so the right region's
+content width is constant and neither the other circles nor the position
+move as tasks start and end (the user's decision for the one circle,
+2026-11-22; before, the position shifted about 20 px). The Tauri app drew a
+bar along the row's top edge (`#scan-progress`); the circle is the user's
+decision.
+
+- Rule: the icon sits beside the circle, not inside it. `ProgressCircle`
+  takes children (it is a `ParentElement`, centered), but at `Size::Small`
+  its ring is 12 px with a stroke of about 2 px, leaving an inner hole of
+  about 8 px, too small for a legible Lucide icon; no screenshot was taken
+  when this was decided (Step 1 of `docs/plans/20261128-task-indicators`),
+  so the inside placement was not tried on screen.
 
 The linear `Progress` was ruled out for that bar, and the reasons hold for
 `ProgressCircle` too, as verified at 0.9.1: it draws its track as its
@@ -4339,7 +4369,7 @@ always animates through `transition` over the theme's
 `motion.duration_normal` (180 ms by default), turned off only by GPUI's
 reduce-motion or by a zero `duration_normal`, which the dialogs read too;
 while it runs it requests animation frames, and since it is keyed by the
-element id (`"progress"`), a drop of the value (pass 1 to pass 2, a rescan)
+element id (`("task", kind)`), a drop of the value (pass 1 to pass 2, a rescan)
 is drawn as the ring emptying from full to 0. The user accepted both by
 choosing the circle.
 
@@ -4358,11 +4388,13 @@ choosing the circle.
   pane hidden, 1600 x 767 with both side panes hidden and 1158 x 936 with
   the strip alone hidden, each the same with the circle shown and gone
   (`../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
-- Rule: do not use `.loading(true)`: nothing here is indeterminate. Pass 2
-  starts at `(0, 0)` and pass 1 can start at a total of 0, so the empty
-  track ring shows there.
-- Rule: the circle adds no `notify` or timer of its own; it is redrawn by the
-  notifies the scan's `Progress` / `FacesProgress`, the trash's
+- Rule: `.loading(true)` only for an `Unknown` task (a held operation, a
+  download of unknown size, the verify). A counted task at a total of 0
+  (pass 2 starts at `(0, 0)`, pass 1 can start at a total of 0) shows the
+  empty track ring, not the loading arc. The loading arc repeats a 1 s
+  animation, so it requests frames for as long as such a task is shown.
+- Rule: the indicators add no `notify` or timer of their own; they are
+  redrawn by the notifies the scan's `Progress` / `FacesProgress`, the trash's
   `TrashProgress`, the undo's `UndoProgress` and the folder runs'
   `SequenceProgress` / `ImportProgress` / `SidecarProgress` already make,
   and it goes wherever `scan_status.clear()`, `trashing = None`,
@@ -4383,13 +4415,13 @@ choosing the circle.
   reserved slot above); pass 1 (about 1.1 s) was
   too short to see (results in
   `../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
-- Sequence JPEG Timestamps and Import feed it through `shown`'s `folder_op`
-  argument: `FolderOps`' `sequence_progress()`, else `import_progress()`
+- Sequence JPEG Timestamps and Import feed the folder slot through
+  `Sources::folder`: `FolderOps`' `sequence_progress()`, else `import_progress()`
   (the order `status_of` uses), set to `(0, 0)` at the run's start, updated
   by `folder_op_message` and cleared in `sequence_ran` / `import_ran`, which
   every end, a cancel included, passes through; no re-listing stops either
   run.
-- The undo of a trash run feeds it through `shown`'s `undo` argument:
+- The undo of a trash run feeds the trash slot through `Sources::undo`:
   `trash::undo_run`'s callback (per item, a RAW or JPEG with its sidecars or
   a sidecar alone, or per chunk on Windows) sends `Event::UndoProgress` into
   `Handpic.undo_progress`, set to `(0, 0)` in `undo_trash` and cleared in

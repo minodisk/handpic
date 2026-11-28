@@ -66,7 +66,7 @@ Taken from the planner's open questions, each with the recommended option:
 
 ## Steps
 
-- [ ] Step 1: The task list model and one indicator per running task in the
+- [x] Step 1: The task list model and one indicator per running task in the
       status row
   - Done when:
     - A pure module gives the list of all running tasks instead of one
@@ -227,3 +227,5 @@ Taken from the planner's open questions, each with the recommended option:
     - Under `--auto` and in the UI tests no toast may block or steal focus.
 
 ## Progress
+
+(2026-11-28) Step 1 complete
