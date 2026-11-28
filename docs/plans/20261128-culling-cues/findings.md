@@ -32,14 +32,18 @@ kept frames.
   quantile 13.0% <= 35%, 1.7% of the kept frames <= 5%), and, as the plan
   says, they do not discriminate at this base rate.
 
-No secondary reading meets either bar's form (and none would be a pass on
-its own). The closest are EAR <= 0.137 (ratio 0.652, 95% 0.521 to 0.763)
+No secondary reading on the culled label meets either bar's form (and none
+would be a pass on its own). The closest are EAR <= 0.137 (ratio 0.652, 95% 0.521 to 0.763)
 and `eye_focus` < 0.9 (0.680, 0.570 to 0.755): both intervals sit below 1
 but above 0.5. Pitch down alone reads 0.746 (0.368 to 1.023); pitch up, 16
 frames, reads 1.008. `|yaw|` > 35 reads 1.053: no lift at all. On the pick
 label over the 26 folders with a pick, `|pitch|` > 45 reads 0.871 (0.754 to
 0.969), closer to 1 than in the culled folders; `2026-08-29` alone reads
-0.892.
+0.892. The one secondary reading that does meet both bars' form is
+`2026-08-29`'s bottom sharpness decile on the pick label (ratio 0.458, kept
+share 6.7%, 4.8% of the picks); it means little: its one-cluster bootstrap
+makes the interval the point, and a secondary reading cannot pass on its
+own. The Decision does not change.
 
 ## Decision
 

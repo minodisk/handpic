@@ -266,3 +266,10 @@ Risks:
   the bars came first is the commit order.
 
 ## Progress
+
+- 2026-11-28: Step 1 done. The reader ran over the library's culled folders;
+  the primary reading is a ratio of 0.763, so bar 1 is not met (and bar 2
+  with it). By the follow-up rule that is branch 2: nothing follows, and the
+  `todo.md` section for the cue-labels reading was removed. PR: this
+  branch's PR (link added at merge). Review round 1 limited the "no
+  secondary reading" sentence in `findings.md` to the culled label.
