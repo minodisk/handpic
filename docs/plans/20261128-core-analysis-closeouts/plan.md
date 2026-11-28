@@ -498,3 +498,5 @@ Taken on 2026-11-28 with the recommended options (Trade-offs 1, 3 and 4):
     `ALLFACES_VERSION` bump to 4 and is not planned here).
 
 ## Progress
+
+- (2026-11-28) Step 1 complete
