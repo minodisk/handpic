@@ -5888,6 +5888,9 @@ impl Handpic {
                 .undo_progress
                 .map(|(done, total)| (self.running_op.unwrap_or("Undo"), done, total)),
             folder,
+            folder_uncounted: self
+                .running_op
+                .filter(|op| *op == rename::LABEL || *op == datefolder::LABEL),
             held,
             update: download.map(|percent| (percent, self.updates.status_text())),
         })

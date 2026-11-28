@@ -77,6 +77,9 @@ pub struct Sources {
     /// The undo of a run, under its label.
     pub undo: Option<(&'static str, usize, usize)>,
     pub folder: Option<(FolderRun, usize, usize)>,
+    /// A folder run with no count (a rename, a split by capture date), under
+    /// its label.
+    pub folder_uncounted: Option<&'static str>,
     /// The operation the idle gate holds, its kind and its label.
     pub held: Option<(Kind, &'static str)>,
     /// The update's download, its percent when the size is known, `None` also
@@ -137,6 +140,16 @@ pub fn tasks(sources: Sources) -> Vec<Task> {
             },
         });
     }
+    if sources.folder.is_none() {
+        if let Some(label) = sources.folder_uncounted {
+            tasks.push(Task {
+                kind: Kind::Folder,
+                label: label.to_owned(),
+                amount: Amount::Unknown,
+                tip: format!("{label}\u{2026}"),
+            });
+        }
+    }
     tasks.extend(held(Kind::Folder));
     if let Some((percent, text)) = sources.update {
         tasks.push(Task {
@@ -170,6 +183,7 @@ pub fn fraction(done: usize, total: usize) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{datefolder, rename};
 
     fn kinds(tasks: &[Task]) -> Vec<Kind> {
         tasks.iter().map(|task| task.kind).collect()
@@ -367,5 +381,20 @@ mod tests {
                 icons::DOWNLOAD
             ]
         );
+    }
+
+    #[test]
+    fn an_uncounted_folder_run_is_an_unknown_task_under_its_label() {
+        for label in [rename::LABEL, datefolder::LABEL] {
+            let tasks = tasks(Sources {
+                folder_uncounted: Some(label),
+                ..Sources::default()
+            });
+            assert_eq!(tasks.len(), 1);
+            assert_eq!(tasks[0].kind, Kind::Folder);
+            assert_eq!(tasks[0].label, label);
+            assert_eq!(tasks[0].amount, Amount::Unknown);
+            assert_eq!(tasks[0].tip, format!("{label}\u{2026}"));
+        }
     }
 }

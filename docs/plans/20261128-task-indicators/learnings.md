@@ -32,11 +32,15 @@
   the PR's GitHub checks are the verification for compile, clippy, the unit
   tests in `progress.rs` / `icons.rs` and the new UI test
   `the_task_list_holds_the_scan_beside_a_held_rename_and_empties_at_the_end`.
-- The UI test observes the scan's task by polling `wait_until`; it relies on
-  pass 1 + pass 2 of three DNGs lasting longer than one poll (10 ms plus a
-  `run_until_parked`), as the held-rename test beside it relies on the hold
-  lasting through the scan. If it proves flaky on CI, observe the scan with
-  a pause held instead.
+- The UI test observes the scan's task with a `ReadSlots` pause held (taken
+  from the view's `slots` before the folder opens, dropped after the
+  assertions), so the scan's reads wait and its task is there to be seen
+  however fast the machine is, not by catching it mid-pass.
+- A folder rename and a `Rename by Capture Date...` split have no counter:
+  once they run, `Sources::folder_uncounted` (fed from `running_op` being
+  `rename::LABEL` or `datefolder::LABEL`) gives the folder slot an
+  `Amount::Unknown` task with the tip `"{label}..."`, so the indicator does
+  not vanish between the gate's "waiting" and the operation's end.
 
 ## Deferred issues (todo candidates)
 
