@@ -387,7 +387,8 @@ impl SettingsView {
     }
 
     /// A new threshold within the range is handed to the main view; a
-    /// refused one shows its reason in the status line. The field shows the
+    /// refused one shows its reason in the view's own line under the body.
+    /// The field shows the
     /// threshold in force either way.
     fn commit_group(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         match settingsmodal::group_change(self.group_min_faces, text) {
@@ -529,7 +530,8 @@ impl SettingsView {
     }
 
     /// Applies `edit` to the shown keymap and hands the result to the main
-    /// view; a refusal goes to the status line and changes nothing.
+    /// view; a refusal goes to the view's own line under the body and
+    /// changes nothing.
     fn edit(&mut self, edit: Edit, cx: &mut Context<Self>) {
         self.model.capturing = None;
         match settingsmodal::edit(&mut self.keymap, edit) {
@@ -631,7 +633,8 @@ impl SettingsView {
         cx.notify();
     }
 
-    /// A switch failed: its message goes to the status line.
+    /// A switch failed: its message goes to the view's own line under the
+    /// body.
     pub fn failed(&mut self, message: String, cx: &mut Context<Self>) {
         self.status = Some(message.into());
         cx.notify();

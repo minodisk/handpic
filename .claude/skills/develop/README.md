@@ -129,9 +129,6 @@ flowchart LR
     PR1 -.->|"has discuss"| MAIN
     PR2 -.->|"has discuss"| MAIN
     PR3 -.->|"has discuss"| MAIN
-    MERGE1 -.->|"needs approval"| MAIN
-    MERGE2 -.->|"needs approval"| MAIN
-    MERGE3 -.->|"needs approval"| MAIN
     LEX -.->|"record only → feature todo candidates"| MAIN
     TC -.->|"deferred → PR body"| MAIN
 
@@ -270,12 +267,18 @@ Branch creation goes at the **head of each phase and each loop**. Cut the next
 branch at the tail and Phase 1 ends up making the branch for Phase 2, crossing
 responsibility boundaries. At the head, each one makes its own branch.
 
-The merge at the tail belongs to the `merger` agent. A PR touching paths a
-revert cannot undo when they break (`.claude/**`, `.github/**`, toolchain and
-supply-chain configuration, and so on) comes back to the main agent as
-`NEEDS_APPROVAL`, and that is a stop across Phases 1–3 / Phase S (every other
-question goes through SKILL.md's § Deciding without asking). `.md` is on the safe side regardless of directory, except under
-`.claude` / `.agents` / `.codex`, so a docs-only PR never lands here. `merger`
+The merge at the tail belongs to the `merger` agent, started under the user's
+standing approval. The main agent first runs `check-merge-approval.sh` itself,
+which is read-only, then starts `merger` with the approved flag whatever it
+printed, and puts every `approval` / `unclassified` line (`.claude/**`,
+toolchain and supply-chain configuration, and so on) in the step's progress
+report: merging without asking is not merging without looking. It stops for
+the user only for the release PR (`release-please--branches--main`, which ships
+through `/release`) and for an `approval` line on a path that shapes a release
+(`.github/**`, `release-please-config.json`, `.release-please-manifest.json`);
+every other question goes through SKILL.md's § Deciding without asking. A
+`NEEDS_APPROVAL` that comes back anyway means the flag was not passed, and the
+main agent re-dispatches with it. `merger`
 also syncs main and cleans up the branch, which duplicates the sync built into
 `ensure-new-branch.sh` at the head of the next loop — but both are idempotent
 operations against `origin/main`, so there is no harm.
@@ -324,15 +327,15 @@ Three risks are accepted:
 2. **plan.md / learnings / `todo.md` / `settings.json` are mixed into the review
    diff.** This is a return to the old scheme's "plan.md rides along in Step 1's
    PR", but with one step the noise is small
-3. **A run with a settings diff always becomes `NEEDS_APPROVAL` because of
-   `.claude/**`, and the implementation stops with it.** In normal mode only the
-   chore PR stops and the implementation is already in. But approval only
-   happens once, so the total does not get worse
+3. **A settings diff merges together with the implementation.** The approval
+   check flags `.claude/**`, and under the standing approval that is reported
+   in the progress report, not a stop, so `settings-promoter`'s promotion goes
+   in with the implementation instead of in a chore PR of its own
 
 There is no "exclusion rule to avoid Phase S" on the `planner` side. A change
-that needs approval, such as one under `.claude/**`, can still fit in one step,
-so needing approval is not avoidable in itself — the judgment is that since
-that approval happens only once, it is accepted as risk 3 above. Plans whose
+under `.claude/**` can still fit in one step: the check reports it and the
+merge goes on. A change on a release-shaping path stops for the user once
+whether it is in one PR or several, so it is no reason to split either. Plans whose
 step-splitting rules already force multiple steps (for example, keeping
 infrastructure changes and application code in separate PRs) split under those
 existing rules anyway.
@@ -491,17 +494,15 @@ sequenceDiagram
         R-->>P: plan JSON (opus)
     end
     P-->>M: terminal state / PR URL
-    M->>G: PR number (2.5)
-    Note over G: approval judgment → squash merge<br/>→ wait for post-merge → sync main → clean up branch
-    alt no approval needed
-        G-->>M: MERGED (SHA / count summary)
-    else path needing approval
-        G-->>M: NEEDS_APPROVAL (matched paths and reason)
-        M->>U: report the approval reason and stop
+    M->>M: check-merge-approval.sh, read-only (2.5)
+    opt release PR, or an approval line on a release-shaping path
+        M->>U: report the reason and stop
         U-->>M: instructs approval
-        M->>G: PR number + approved flag
-        G-->>M: MERGED (SHA / count summary)
     end
+    M->>G: PR number + approved flag
+    Note over G: squash merge → wait for post-merge<br/>→ sync main → clean up branch
+    G-->>M: MERGED (SHA / count summary)
+    M->>M: report the check's approval / unclassified lines
 ```
 
 The reviewer and `local-review-addresser` never see each other's return values.
@@ -844,7 +845,6 @@ flowchart LR
     PR2 ==> ARP2["pr-review-planner<br/>opus"]
     PR2 ==> ARA2["pr-review-addresser<br/>sonnet"]
     PR2 -.->|"needs_discussion"| MAIN2
-    MG2 -.->|"needs approval"| MAIN2
 
     classDef mainagent fill:#dbeafe,stroke:#1e40af,stroke-width:3px,color:#1e3a5f
     classDef agent fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
@@ -871,8 +871,10 @@ The `/merge` route differs from the develop route in only three ways, all
 confined to the caller's branching (the agent definition is shared). `/merge` is
 a command a human types, and typing it is the approval, so it starts `merger`
 with the approved flag from the very first dispatch (`merger` skips the approval
-judgment and never returns `NEEDS_APPROVAL`). develop runs unattended, so it
-starts without the flag and stops at `NEEDS_APPROVAL` on paths that need it.
+judgment and never returns `NEEDS_APPROVAL`). develop starts it with the flag
+too, under the user's standing approval, but runs the read-only check first,
+reports what it flagged, and stops before the dispatch for the release PR and
+for an `approval` line on a release-shaping path.
 Also, on `NOT_READY`, `/merge` points the user at `/pr <number>` and ends,
 whereas develop re-runs `pr-runner` exactly once. And on `MERGED`, `/merge`
 reports and ends there, whereas develop moves straight to the next Phase / Step
@@ -954,31 +956,25 @@ They go together well:
   holds; when using `/goal` with a Phase S develop, read it as "the single PR
   was merged"
 
-**The thing to watch is merge approval.** The merge itself is done by `merger`
-in 1.4 / 2.5 / 3.7 / S.7, so a PR that needs no approval (a plan PR touching
-only `.md` at any level, a chore PR with nothing to promote, an implementation
-PR with only ordinary code changes) will not stop under `/goal`. But a Phase S
-PR is a single PR containing the implementation plus the plan and learnings, so
-it is more likely to become `NEEDS_APPROVAL` depending on what it implements
-(see S.6 in SKILL.md), and `/goal` stops more often than in normal mode. The
-case that can spin is when `NEEDS_APPROVAL` comes back, where it reports the
-approval reason in prose and stops. But that is not a stopping point where the
+**The thing to watch is the release-shaping stop.** The merge itself is done by
+`merger` in 1.4 / 2.5 / 3.7 / S.7 under the user's standing approval, so an
+ordinary PR, `.claude/**` included, will not stop under `/goal`; what the
+approval check flagged is only reported. The run stops for the release PR and
+for an `approval` line on a release-shaping path (`.github/**`,
+`release-please-config.json`, `.release-please-manifest.json`), where it
+reports the reason in prose and stops. But that is not a stopping point where the
 harness blocks the turn, the way `AskUserQuestion` does — a prose report merely
 ends the turn, so if `/goal` keeps injecting continuations, there is technically
-room for the main agent to "treat it as approved" and go on to re-dispatch with
+room for the main agent to "treat it as approved" and go on to start `merger` with
 the approved flag without waiting for the user's instruction. Whether it
 actually stops depends on the main agent's restraint. Mitigations:
 
 - Put a **cutoff clause** like `or stop after 20 turns` into the condition
   (officially recommended)
 - Set the goal **per phase** ("until Step 3's PR is ready", for instance)
-- If the approval requests are in the way, **loosen the approval judgment
-  itself** (promote it to a safe pattern in `check-merge-approval.sh`). That is
-  a change to the criteria rather than a skill-side workaround, so treat it as
-  an agreement about what may be merged unattended
-- Do not re-dispatch with the approved flag in response to a prose
-  `NEEDS_APPROVAL` report without an explicit instruction from the user (watch
-  this especially when using `/goal`)
+- Do not start `merger` on a release-shaping stop, and do not merge the
+  release PR, without an explicit instruction from the user (watch this
+  especially when using `/goal`)
 
 `POST_MERGE_FAILED` / `POST_MERGE_TIMEOUT` are stopping points too. Rerunning a
 failed apply or supplying a secret by hand needs human judgment, so they do not

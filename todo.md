@@ -12,16 +12,6 @@ On PR #1336, which changed only docs, the first attempt of the `app (windows-lat
 - [ ] When one of them fails again on CI, save the job log (`gh api repos/minodisk/handpic/actions/jobs/<id>/logs`) before it expires, and record the panic and, for the two `folderops` tests, the phase `uitest.rs`'s watchdog reports.
 - [ ] Read each test's waits (the `folderops` tests' `wait_until` bounds; the judgment test's `DRAIN_TIMEOUT` (2 s) against `DEBOUNCE`) for a timing assumption a loaded Windows runner can break, and fix it or widen the bound, without running the tests in a local loop (CLAUDE.md forbids load tests on the host).
 
-### App: the keymap capture refusal is drawn in the settings body, but app.md says the status line
-
-#### Background
-
-`docs/agents/app.md`'s keymap section ("The keymap is edited in the modal and replaced whole") says a refused capture key shows its refusal on the status line. On Windows 11 on 2026-11-27 (results in `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`, item 14), `+` then `home` and `+` then `end` showed `"home" is taken by this app` (and the same for `end`) in red in the settings body; the full-window settings layer covers the status line, and the keymap was unchanged. It may be the settings' own line rather than the status line. Plan: `docs/plans/_archived/20261127-windows-device-checks-c5/plan.md`. Files: `docs/agents/app.md`, `crates/app/src/settingsview.rs`.
-
-#### TODO
-
-- [ ] Check in `crates/app/src/settingsview.rs` which line draws a refused capture key's refusal, and correct the rule in `docs/agents/app.md`'s keymap section to match.
-
 ### Core: the AF path's sharpness luma covers the whole frame though the score reads only its window
 
 #### Background
@@ -158,14 +148,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       the rated frames of `D:\photos\samples\ARW\good-mark-2026-10-09\`.
       Files: `crates/engine/src/index.rs`, `crates/app/src/meta.rs`,
       `crates/core/src/eyes.rs`.
-- [ ] Faces rolled past 90 deg (a baby lying head-down,
-      `D:\photos\2026\2026-07-11\_DSC2638.ARW`) get a mesh fitted as if
-      upright, and the eye line cannot de-rotate them: `faces.rs` orders
-      YuNet's eye points by image x, so the eye-line roll folds into -90..+90
-      deg. They need another roll source (a mesh pass on rotated crops,
-      MediaPipe's tracking loop). Not planned; see
-      `docs/plans/_archived/20261010-mesh-roll/` (Decision). Files:
-      `crates/core/src/faces.rs`, `crates/core/src/eyes.rs`.
 - [ ] Review the mesh misfit labels: open the sheets
       `D:\Photos\tests\2026-10-09-mesh-roll\sheets\s00.png` to `s15.png`
       and compare each tile to its row of
@@ -174,14 +156,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       Decision's shares rest on the agent's labels; if labels change,
       re-run `compare.py` in that plan folder and update `compare.md` and
       the Decision if a number moves.
-- [ ] Suggest the sharpest-eye frame within a burst group. Measured and not
-      shipped (`docs/plans/_archived/20261008-burst-keep-score/`, Decision 1, `results.md` and `fit.md`): the user
-      picks within a burst by timing, not by a technical feature; the
-      burst's length, not sharpness or the eyes, predicts a kept scene
-      (79% held out at 15 or more frames, which the burst band's count
-      already shows, against about 56% for the best technical rule); and
-      the non-picks are mostly technically fine. Revisit only with a new
-      signal; the per-frame good-photo mark above covers "is this a miss".
 - [ ] AF on a person in the background gives a sharp face and a false Good:
       the measure says the eyes of the face nearest the AF point are sharp,
       not that it is the subject. Files: `crates/core/src/candidate.rs`.
@@ -384,18 +358,6 @@ Files: `crates/core/src/arw.rs`, `crates/core/src/reader.rs`, `docs/humans/camer
 
 - [ ] Read the Leica M10's aperture from its Leica MakerNote, check it against `exiftool`, and drop the "no aperture" sentence from both cameras docs.
 - [ ] Find where `exiftool` reads the shooting fields of the four phone DNGs from, and decide whether Handpic should read them there. Done when the cause is written here or fixed.
-
-### Docs: cameras.ja.md lags behind cameras.md
-
-#### Background
-
-`docs/humans/cameras.ja.md` still has the policy paragraph from before #656 ("2010 年より前"), about 30 pre-2016 Fujifilm and FinePix rows, and two extra rows in the embedded JPEG size table, all of which `docs/humans/cameras.md` no longer has. Found while adding the 2026-11-27 raw.pixls.us survey's DNG bodies, which touched only the rows and paragraphs that change added.
-
-Files: `docs/humans/cameras.md`, `docs/humans/cameras.ja.md`.
-
-#### TODO
-
-- [ ] Bring `docs/humans/cameras.ja.md` in line with `docs/humans/cameras.md`: replace the policy paragraph, delete the delisted rows and the two size rows, and fix the sentences that name them.
 
 ### Core: M-RAW RAF files are unverified
 
@@ -651,11 +613,11 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### Background
 
-`gpui-folder-dialogs` Step 5 ported Import… to the GPUI app (`import.rs`: preview on a background task, `prepare` / `run_plan` on a thread with a cancel flag, the dialog stepping aside, the first date folder opened through `open_from_tree`). CI and the unit tests of `import.rs`, `context.rs` and `dialog.rs` cover the model. Nobody has seen the dialog, the progress, the open of the first date folder, the reopen or the cancel in the running app. The step's checkbox was ticked on the automated criteria only. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-5/learnings.md`; the run's material was under `D:\Photos\tests\20261122-folderops\`, not the `20261113-gpui-folder-dialogs` paths its setup box names) the dialog's count, its date folder rows and undated list and `Run` outlined, a run opening its first date folder in the tree and strip and ending in `Imported 9 files (273.1 MB)` with each `.xmp` beside its RAW, the reopened dialog's `Nothing left to copy` with `Run` dimmed and `Cancel` focused, the other-size list, the no-root refusal and one `import:` log line per run were seen. The source held no JPEGs of the two dates and no `.dop`; a 3.16 GB source copied from the file cache in a few seconds, too fast for the mid-run box; MCP `import_folder` is refused during a run (`a folder operation is under way in Handpic; try again once it ends`); the `Source:` line and the status line's `no RAW files in` text showed the Windows verbatim prefix (since stripped for display); the list clipped its last row (fixed by `folder-dialog-list-layout`). On Windows 11 on 2026-11-27 (results in `docs/plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`), on a source with JPEGs of the two dates and a `.dop`: the dialog's Tab from `Run` to `Cancel` and back and its Escape; the `reading …` note of a 500-JPEG preview; a 375-file, 6.31 GB run not in the file cache, with the dialog stepping aside, the first date folder opening and the pane counting `importing n / 375`; `Import…` picked mid-run bringing the dialog back with `Run` dimmed and `Cancel` focused, Escape hiding it with the run going on; and `Cancel` stopping a second run with `Import canceled, 78 files copied` and no `.handpic-tmp` file left were seen. The strip did not fill during the run: the open date folder read `This folder has no RAW or JPEG files.` until that folder's copies had all landed, because the open folder's watcher reports a burst `DEBOUNCE` (500 ms) after its last event and a copy that never pauses that long never settles; the fix, a maximum wait on the debounce, is delegated to the session `dlg-c4-import-watch`. What is left open is the box below. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/import.rs`, `crates/app/src/folderops.rs`, `crates/engine/src/import.rs`, `crates/engine/src/watch.rs`.
+`gpui-folder-dialogs` Step 5 ported Import… to the GPUI app (`import.rs`: preview on a background task, `prepare` / `run_plan` on a thread with a cancel flag, the dialog stepping aside, the first date folder opened through `open_from_tree`). CI and the unit tests of `import.rs`, `context.rs` and `dialog.rs` cover the model. Nobody has seen the dialog, the progress, the open of the first date folder, the reopen or the cancel in the running app. The step's checkbox was ticked on the automated criteria only. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-5/learnings.md`; the run's material was under `D:\Photos\tests\20261122-folderops\`, not the `20261113-gpui-folder-dialogs` paths its setup box names) the dialog's count, its date folder rows and undated list and `Run` outlined, a run opening its first date folder in the tree and strip and ending in `Imported 9 files (273.1 MB)` with each `.xmp` beside its RAW, the reopened dialog's `Nothing left to copy` with `Run` dimmed and `Cancel` focused, the other-size list, the no-root refusal and one `import:` log line per run were seen. The source held no JPEGs of the two dates and no `.dop`; a 3.16 GB source copied from the file cache in a few seconds, too fast for the mid-run box; MCP `import_folder` is refused during a run (`a folder operation is under way in Handpic; try again once it ends`); the `Source:` line and the status line's `no RAW files in` text showed the Windows verbatim prefix (since stripped for display); the list clipped its last row (fixed by `folder-dialog-list-layout`). On Windows 11 on 2026-11-27 (results in `docs/plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`), on a source with JPEGs of the two dates and a `.dop`: the dialog's Tab from `Run` to `Cancel` and back and its Escape; the `reading …` note of a 500-JPEG preview; a 375-file, 6.31 GB run not in the file cache, with the dialog stepping aside, the first date folder opening and the pane counting `importing n / 375`; `Import…` picked mid-run bringing the dialog back with `Run` dimmed and `Cancel` focused, Escape hiding it with the run going on; and `Cancel` stopping a second run with `Import canceled, 78 files copied` and no `.handpic-tmp` file left were seen. The strip did not fill during the run: the open date folder read `This folder has no RAW or JPEG files.` until that folder's copies had all landed, because the open folder's watcher reports a burst `DEBOUNCE` (500 ms) after its last event and a copy that never pauses that long never settles. The watcher now also reports an ongoing burst every `MAX_WAIT` (2 s) (#1358). What is left open is the box below. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/import.rs`, `crates/app/src/folderops.rs`, `crates/engine/src/import.rs`, `crates/engine/src/watch.rs`.
 
 #### TODO
 
-- [ ] On Windows, once the open folder's watcher reports during a burst that never pauses (a maximum wait on `DEBOUNCE` in `crates/engine/src/watch.rs`, delegated to the session `dlg-c4-import-watch`), `Run` an import on a source not in the file cache (or on a slow disk). Expect the strip of the opened date folder to fill while the pane counts `importing n / m`. (On 2026-11-27 the dialog stepped aside and the pane counted, but the strip stayed empty until that date folder's copies ended.)
+- [ ] On Windows, now that the open folder's watcher reports during a burst that never pauses (`MAX_WAIT` in `crates/engine/src/watch.rs`, #1358), `Run` an import on a source not in the file cache (or on a slow disk). Expect the strip of the opened date folder to fill while the pane counts `importing n / m`. (On 2026-11-27 the dialog stepped aside and the pane counted, but the strip stayed empty until that date folder's copies ended.)
 
 ### App: real-device checks of the tree's inline folder rename (gpui-folder-dialogs Step 7)
 
@@ -706,29 +668,14 @@ Files: `crates/app/src/main.rs` (`paint_marks`, `paint_face_icon`, `paint_burst_
 - [ ] On Windows, on a scanned folder that includes a burst (frames within `BURST_GAP_MS`, so the badge shows) and a closed-eyes mark over a bright area, check on screen that the strip's stars, face focus icon, closed-eyes mark and burst badge each have the same dark outline (one dark copy down and right), and that each reads over both bright and dark parts of a photo.
 - [ ] On macOS and Linux (any platform at hand), repeat the same check.
 
-### App: real-device checks of the gpui-component adoption (theme, Input, controls, menus, Root, the three Dialogs)
+### App: real-device checks of the gpui-component adoption (menus, Root, the trash and folder operations' Dialogs)
 
-`gpui-component-adoption` called `gpui_component::init` with a Neutral dark theme map, replaced `textinput.rs` with `Input`, moved the settings modal's controls to `Button` / `Checkbox` / `Radio` with scrollbars, gave the Sort / Filter and right-click menus the theme's look, mounted `Root`, and turned the trash / delete dialog, the folder operations' dialog and the settings modal into `Dialog`s. `mise run ci:local`, the pure models' unit tests, the keymap tests and the Step 5 A/B latency gate cover the build and the rules. The crate has no GPUI view test and `--auto` cannot click, so the IME, focus, Tab order, outside click, Escape behavior and look of every step were never exercised on screen. Seen on Windows 11 on 2026-11-27 (results in `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`): seen in passing, in a 480 px tall window `Filter ▾` and the right-click menus stop under the title bar, the `Filter ▾` thumb drags and a press on its track scrolls it and leaves it open, and the `Lightroom language` `Select` opens and chooses by keys with Tab / Shift+Tab keeping the focus in the settings; the boxes below were not otherwise run. Plan: `docs/plans/_archived/20261114-gpui-component-adoption/plan.md`. Files: `crates/app/src/main.rs`, `crates/app/src/theme.rs`, `crates/app/src/settingsview.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/folderops.rs`, `crates/app/src/dialog.rs`, `crates/app/src/trash.rs`, `crates/app/src/modal.rs`, `crates/app/src/icons.rs`, `docs/agents/app.md`.
+`gpui-component-adoption` gave the Sort / Filter and right-click menus the theme's look, mounted `Root`, and turned the trash / delete dialog and the folder operations' dialog into `Dialog`s (it also called `gpui_component::init`, replaced the old text input with `Input` and moved the settings modal's controls to gpui-component, which later work superseded: the settings are a full-window layer and `Sort ▾` / `Filter ▾` sit in the strip header). `mise run ci:local`, the pure models' unit tests, the keymap tests and the Step 5 A/B latency gate cover the build and the rules. The crate has no GPUI view test and `--auto` cannot click, so the focus, Tab order, outside click, Escape behavior and look of the steps below were never exercised on screen. Seen on Windows 11 on 2026-11-27 (results in `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`): seen in passing, in a 480 px tall window `Filter ▾` and the right-click menus stop under the title bar, the `Filter ▾` thumb drags and a press on its track scrolls it and leaves it open, and the `Lightroom language` `Select` opens and chooses by keys with Tab / Shift+Tab keeping the focus in the settings; the boxes below were not otherwise run. Plan: `docs/plans/_archived/20261114-gpui-component-adoption/plan.md`. Files: `crates/app/src/main.rs`, `crates/app/src/theme.rs`, `crates/app/src/settingsview.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/folderops.rs`, `crates/app/src/dialog.rs`, `crates/app/src/trash.rs`, `crates/app/src/modal.rs`, `crates/app/src/icons.rs`, `docs/agents/app.md`.
 
 Run only on copies under `D:\Photos\tests\20261114-gpui-component-adoption\`, with a fresh `--index` and a test `--settings`. Build with `cargo build --manifest-path crates/app/Cargo.toml` (rename a locked `handpic.exe` aside, do not kill it). Launch with `crates/app/target/debug/handpic.exe --index <fresh temp>/index.sqlite --settings <test>/settings.sqlite D:\Photos\tests\20261114-gpui-component-adoption\<copy>`.
 
 #### TODO
 
-- [ ] On Windows (Step 1: init and theme), page with the arrows, press `tab` (the side panes toggle), `f`, `z`, `e`, `d`, open and close the Sort / Filter menus, open the settings with `ctrl+,` and type a label name with the Japanese IME, open a right-click menu on the strip and on the tree, open and cancel the trash dialog, and press `ctrl+shift+i` (the component inspector opens, debug build). Expect everything to look and behave as on `main`, with only `ctrl+shift+i` new. Then run once with `--auto 20` and compare the timing lines with a `main` build's: they should be the same in kind (not the A/B gate).
-- [ ] On Windows (Step 2: `Input`), in the settings' Sidecar tab check that the name fields show the stored names with a 1 px white-15 % border, no fill, and the same height and text size as `main` within a pixel or two, and that the focused one has the `#e5e5e5` border and no extra ring. Then:
-  - Type a label name with the Japanese IME: the composition is underlined, the candidate window sits at the caret, and Enter inside the composition commits the composition, not the field.
-  - Commit with Enter, with a click elsewhere in the box and with Tab (Tab and Shift+Tab move between the modal's stops from inside a field), then reopen the modal and see the names stored.
-  - Escape in a field closes the modal with the edited name kept. `Reset` and a language pick show their names in the fields.
-  - In the Import tab type a pattern with and without the IME: the example line follows each key, an invalid pattern shows its refusal in red on commit, and an example pattern button fills the field and its example.
-  - `ctrl+a` then typing replaces the text; `ctrl+c` / `ctrl+x` / `ctrl+v` work; `ctrl+z` undoes (new).
-  - Right-click in a field: no panic, and the OS-native Cut / Copy / Paste / Select All menu shows and works.
-  - A key typed in a field (`f`, `z`, `d`, the arrows) acts in the field only.
-  - After closing the modal the arrows page again.
-- [ ] On Windows (Step 2 catch-up: the tree's inline rename editor, ported to `Input` without being seen on screen), start a rename from the tree (a slow second click on the open folder's name, or the right-click `Rename…`). Expect an editor with the whole name selected, a `#e5e5e5` border, no fill, 13 px text, fitting the row's height. Then:
-  - Type a new name with the Japanese IME: Enter inside the composition commits the composition, not the rename.
-  - Commit with Enter: the folder is renamed and the tree has the keyboard again. Start another and commit with a click elsewhere: renamed as well.
-  - Start another and press Escape: nothing is renamed, the name comes back, the tree has the keyboard.
-  - Switch to another app with the editor open: no rename until the window comes back.
 - [ ] On Windows (Step 4: menus), the Sort and Filter menus are the `#171717` surface with a white-10 % border and 6 px radius, 26 px rows with 6 px rounded `#262626` hover, the check icon at the left of a checked item, muted headings, separators across the padding, and a disabled item muted with no hover. Use a folder with bursts and EXIF variety so the Filter menu is long. Then:
   - Sort and Filter open above their button with the right edges aligned.
   - An outside press closes an open Sort / Filter menu (in the strip, in the preview, and on the menu's own button, which does not reopen it). An item click applies and leaves the menu open.
@@ -786,18 +733,6 @@ Files: `crates/app/src/main.rs` (`tree_pane`, `meta_pane`, `render`), `crates/ap
 #### TODO
 
 - [ ] On Windows, open a second folder while a file of the first is on screen. Expected: until the new folder's first preview arrives, the pane shows no rows from the index (not another file's), then the new file's rows. (Inconclusive on 2026-11-27: the first capture landed 0.37 s after `open_folder`, when the new folder's preview was already shown, and both folders held files of the same names. Use folders with different file names and something faster than a screenshot.)
-
-### App: real-device checks of the settings as a full-window layer (native-settings-component Step 1)
-
-#### Background
-
-The `native-settings-component` feature's Step 1 replaced the settings `Dialog` with a full-window, opaque, occluding layer drawn by `Handpic::render`, under a focus trap. CI and `mise run ci:local` cover the build and the pure `settingsmodal.rs` tests. The layer's opacity, typing, the Tab trap (30 Tabs and 2 Shift+Tabs stayed in the settings with the panes untouched), the `tab` capture, the blocked keys and strip click, and the close by Escape and `×` were seen on Windows 11 on 2026-11-21; hovers, wheel scrolls and the drop were not tried. Seen on Windows 11 on 2026-11-27 (results in `docs/plans/_archived/20261127-windows-device-checks-c5/results.md`): with the settings open, a hover where a strip cell's tooltip would show showed none, and three wheel notches there left the strip unscrolled; the drop was not run. Plan: `docs/plans/_archived/20261115-native-settings-component/plan.md`.
-
-Files: `crates/app/src/settingsview.rs`, `crates/app/src/main.rs`.
-
-#### TODO
-
-- [ ] On Windows, run the app with a test `--settings` store and an open folder, open the settings and drop a folder on the window. Expected: it opens nothing (record what actually happens; if it differs, correct the drop rule in `docs/agents/app.md`).
 
 ### App: real-device checks of the settings body drawn with gpui-component's `Settings` (native-settings-component Step 2)
 
@@ -1191,36 +1126,6 @@ Files: `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`), `crates/app/
 
 - [ ] On macOS and Linux, when at hand, open a folder of RAW files with people and let pass 2 finish. Expect the strip cells showing the amber `eye-off` mark at the bottom-left to be exactly the files whose meta pane `Eyes` row says closed, and exactly the files the filter menu's `Eyes` > `Closed` keeps. On a fresh `--index`, expect the mark to appear on cells live as pass 2 reaches them (`analyzing N / M`), with no re-listing. At the minimum strip height (`stripheight::MIN`), expect the mark to sit right of the face focus icon without overlapping it or the burst badge (including a three-digit badge), and to be dimmed with a rejected cell. (All three passed on Windows on 2026-11-27.)
 
-### Agents: `planner.md` should have a plan name the input kind and material of each hands-on Done-when line
-
-#### Background
-
-The agent-run-device-checks work (plan: `docs/plans/_archived/20261127-agent-run-device-checks/plan.md`) made the develop wrap-up run the manual checks this host can run, and file only the rest. `planner.md` was left unchanged, so a plan may still write "Manually verified on Windows" as a Done-when line, with no word on whether an agent can run it or what material it needs. `implementer.md` step 6 now asks a pending check to be recorded with its platform, input kind and material. Files: `.claude/agents/planner.md`, `.claude/agents/implementer.md`, `.claude/skills/develop/SKILL.md` (3.3).
-
-#### TODO
-
-- [ ] Make `planner.md` ask a plan to name, for each hands-on Done-when line, the input kind (agent-runnable or user-only) and the material, consistent with the wrap-up's reason list in `SKILL.md` 3.3 and `implementer.md` step 6.
-
-### App: the eyes supersede rule is stale in `CLAUDE.md` and in the `eyes.rs` comments
-
-#### Background
-
-`CLAUDE.md`'s `src/eyes.rs` description says "so a newer request or a clear supersedes the running judgment", and the doc comments of `EyesTicket` and `EyesCache::current` in `crates/app/src/eyes.rs` say the same. `EyesCache::request` issues no ticket while a judgment is in flight, so only a `clear` supersedes a running one. Seen on Windows 11 on 2026-11-27: 60 `navigate next` 8 ms apart logged three `eyes` lines (results in `docs/plans/_archived/20261127-windows-device-checks-mcp/results.md`). The section "An on-demand judgment is superseded through a shared atomic" of `docs/agents/app.md` was already corrected; `CLAUDE.md` and the code comments were not, because the plan changed docs and todo only. Files: `CLAUDE.md`, `crates/app/src/eyes.rs`.
-
-#### TODO
-
-- [ ] Reword the `src/eyes.rs` description in `CLAUDE.md` and the doc comments of `EyesTicket` and `EyesCache::current` so that while a judgment runs only a `clear` supersedes it, and a newer request's id only follows a settle or a clear.
-
-### Agents: the develop README still describes `NEEDS_APPROVAL` as a stopping point
-
-#### Background
-
-`.claude/skills/develop/README.md` still describes `merger`'s `NEEDS_APPROVAL` as a point where develop stops for the user. It does so in the step sequence diagram, in "Folding into one PR" risk 3 and in the "Operational note: using it with `/goal`" section. `.claude/skills/develop/SKILL.md` § Merge merges with a standing approval, except for the release PR and the release-shaping paths. The develop-decide-by-recommendation work (plan: `docs/plans/_archived/20261128-develop-decide-by-recommendation/plan.md`) reworded only the "single point of dialogue" sentence and left the rest. Files: `.claude/skills/develop/README.md`, `.claude/skills/develop/SKILL.md`.
-
-#### TODO
-
-- [ ] Bring the three README places in line with SKILL.md § Merge (merge with a standing approval, stop only for the release PR and the release-shaping paths).
-
 ### Agents: confirm the develop session end through herdr `/exit` on a real run (develop-decide-by-recommendation)
 
 #### Background
@@ -1266,13 +1171,3 @@ Files: `docs/humans/performance.md`, `docs/humans/performance.ja.md`.
 #### TODO
 
 - [ ] On an idle host, with the user's go-ahead for repeated runs, alternate the before and after builds as `docs/humans/performance.md` does (`handpic-cli allfaces <files> 1`, fastest of three) on `2026-02-01` and the first 300 ARW of `2026-11-07`, and add the measured per-file times to the "All-faces check (Windows 11)" section of both languages.
-
-### Docs: state the Git Bash `MSYS_NO_PATHCONV=1` rule once for every `/`-leading argument
-
-#### Background
-
-The rule lives only in the Inno Setup section of `docs/agents/app.md` (the `ISCC.exe` entry, around line 836), yet it has now bitten an unrelated command. The develop-exit-pathconv work (plan: `docs/plans/_archived/20261128-develop-exit-pathconv/plan.md`) found that `herdr pane send-text "$HERDR_PANE_ID" "/exit"` became `C:/Program Files/Git/exit`. Git Bash rewrites any native-exe argument that starts with `/`. Sessions that shell out load `CLAUDE.md`, not `app.md`, so they never see the rule. Files: `CLAUDE.md`, `docs/agents/app.md`, `.claude/skills/develop/SKILL.md`.
-
-#### TODO
-
-- [ ] Pick one option: (a) one line in `CLAUDE.md`'s Windows host paragraph next to the `mise x --` rule, or (b) a short Windows-shell guide under `docs/agents/`, linked from `app.md` and the develop skill. Write the general rule once, and make the `app.md` `ISCC.exe` entry point to it. Done when one option is chosen, the general rule is written once, and the `app.md` `ISCC.exe` entry points to it.

@@ -71,6 +71,15 @@ gate: no agent runs either full task locally (the full root workspace build has
 run this host out of memory), and `ci:local` leaves the other platforms and
 the dependent crates' tests to the PR's checks.
 
+A Done-when line that needs a hands-on check on a real machine names three
+things, in the terms of `implementer.md` step 6 and the wrap-up's "Not runnable
+here" reason in the develop skill: the platform (Windows, macOS, Linux, the
+display or session it needs), the input kind (what an agent can drive: MCP
+tools and screenshots, the log, a shell command, an installer; or what only the
+user can: a key press, a drag, the user's eye) and the material (a build, test
+photos, a camera body). "Manually verified on Windows" alone does not say
+whether an agent can run it or what it needs.
+
 ## Writing the implementation approach
 
 **Write only what is known; omit it when it is not.** Writing down what you do

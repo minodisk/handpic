@@ -13,9 +13,10 @@ use std::{
 
 use handpic_engine::ondemand::EyesJudgment;
 
-/// What `request` hands out: the id the engine's `current` check
-/// supersedes older requests by, and the generation the answer is settled
-/// against.
+/// What `request` hands out: the id the engine's `current` check compares
+/// with the latest, and the generation the answer is settled against. No
+/// ticket is issued while a judgment runs, so only a `clear` supersedes a
+/// running one; a newer request's id follows only a settle or a clear.
 #[derive(Debug, Clone, Copy)]
 pub struct EyesTicket {
     pub id: u64,
@@ -57,9 +58,10 @@ impl EyesCache {
         })
     }
 
-    /// Whether `ticket` is still the latest request: false once a newer one
-    /// is issued or the cache is cleared, which stops the judgment at its
-    /// next stage as superseded.
+    /// Whether `ticket` is still the latest request: false once the cache is
+    /// cleared, which stops the judgment at its next stage as superseded.
+    /// While it runs no newer ticket is issued, so only a `clear` supersedes
+    /// it; a newer request's id follows only a settle or a clear.
     pub fn current(&self, ticket: EyesTicket) -> impl Fn() -> bool + Send + 'static {
         let latest = self.latest.clone();
         move || latest.load(Ordering::Relaxed) == ticket.id
