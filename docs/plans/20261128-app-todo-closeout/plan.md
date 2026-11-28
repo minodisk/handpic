@@ -233,3 +233,5 @@ Taken by the develop run without asking (each had a clear recommendation):
 - All three touch `todo.md` and two touch `uitest.rs`, so later steps rebase.
 
 ## Progress
+
+- (2026-11-28) Step 1 complete
