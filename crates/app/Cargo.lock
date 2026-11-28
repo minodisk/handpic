@@ -3184,7 +3184,7 @@ dependencies = [
 
 [[package]]
 name = "handpic-app"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "dirs 6.0.0",
  "futures",
@@ -3205,7 +3205,7 @@ dependencies = [
 
 [[package]]
 name = "handpic-core"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3225,7 +3225,7 @@ dependencies = [
 
 [[package]]
 name = "handpic-engine"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
