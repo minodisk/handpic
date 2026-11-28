@@ -19,10 +19,10 @@
 //!    frame sharp anywhere ranks above one sharp nowhere.
 //!
 //! Only meaningful relative to other frames. `score_preview` decodes the
-//! preview to grayscale (the JPEG's Y channel); `score_gray` scores luma the
-//! caller already has, which the scan passes on paths 0, 1 and 2 from the
-//! BT.601 luma of the face cue's RGB decode (path 3 has no cue decode and
-//! decodes to grayscale), so those two inputs can differ slightly.
+//! preview to grayscale (the JPEG's Y channel); `region` gives the window (or
+//! the tiles) `score_gray` reads, and the scan computes the BT.601 luma of
+//! only that window of the face cue's RGB decode (path 3 has no cue decode
+//! and decodes to grayscale), so those two inputs can differ slightly.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
